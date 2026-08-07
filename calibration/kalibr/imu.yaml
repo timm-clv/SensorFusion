@@ -1,0 +1,46 @@
+rostopic: /d435/d435_node/imu    #/olive/camera/olivecam/filtered_ahrs
+update_rate: 200
+
+#Accelerometer
+#accelerometer_noise_density: 0.002661559290321972 
+#accelerometer_random_walk: 0.00029117833123787297 
+
+#Gyroscope
+#gyroscope_noise_density: 3.957816435226104e-05 
+#gyroscope_random_walk: 2.7958932684593066e-07 
+
+#Meme avec un autre sample : 25
+#Accelerometer
+#accelerometer_noise_density: 0.02069868984  
+#accelerometer_random_walk: 0.0017328641391276312 
+
+#Gyroscope
+#gyroscope_noise_density: 0.00035445417
+#gyroscope_random_walk: 5.363825882501178e-06 
+
+
+#white *5
+#walks *10
+
+#olixSense
+#accelerometer_noise_density: 0.013307796
+#accelerometer_random_walk: 0.0029117833123787297 
+#gyroscope_noise_density: 0.00019789082 
+#gyroscope_random_walk: 2.7958932684593066e-06
+
+#OliveVision
+#a#ccelerometer_noise_density: 0.05482201307
+#accelerometer_random_walk: 0.04369065701339204 
+#gyroscope_noise_density: 0.00849309453
+#gyroscope_random_walk: 0.00011002624872473468
+
+# Realsense *5 and *10
+accelerometer_noise_density: 0.01373676763 
+accelerometer_random_walk: 5.6247717429045986e-04 
+
+#Gyroscope
+gyroscope_noise_density: 0.00097604109  
+gyroscope_random_walk: 1.4185449668488343e-05
+
+
+

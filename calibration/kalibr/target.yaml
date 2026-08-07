@@ -1,0 +1,7 @@
+target_type: 'aprilgrid'
+tagCols: 6
+tagRows: 6
+tagSize: 0.088
+tagSpacing: 0.3 #0.26399999999999996
+#tagFamily: 'tag36h11'  # Famille standard générée par Kalibr
+codeOffset: 0

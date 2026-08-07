@@ -1,0 +1,8 @@
+cam0:
+  camera_model: pinhole
+  distortion_coeffs: [-0.05551145786489933, 0.029442090222052172, -0.028299846668714417, 0.00781929524076502]
+  distortion_model: equidistant
+  intrinsics: [567.2852783486742, 566.4961372581788, 652.7255421321942, 397.4199032103684]
+  line_delay: 2.5371815466779987e-05
+  resolution: [1280, 720]
+  rostopic: /olive/camera/image_raw
