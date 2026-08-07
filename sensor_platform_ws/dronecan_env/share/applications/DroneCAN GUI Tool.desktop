@@ -1,0 +1,8 @@
+[Desktop Entry]
+Categories=Development;Utility;
+Comment=DroneCAN Bus Management and Diagnostics App
+Exec=/dronecan_gui_tool-1.2.28.data/scripts/dronecan_gui_tool
+GenericName=DroneCAN Bus Management and Diagnostics App
+Icon=dronecan_gui_tool
+Name=DroneCAN GUI Tool
+Type=Application

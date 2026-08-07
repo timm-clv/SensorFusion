@@ -1,0 +1,8 @@
+build/
+install/
+log/
+.catkin_workspace
+*.db3
+*.zstd
+*.o
+*.so

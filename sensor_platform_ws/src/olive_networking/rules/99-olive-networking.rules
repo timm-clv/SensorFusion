@@ -1,0 +1,6 @@
+# udev rules for the sensors of Olive Robotics (Ethernet-over-USB)
+SUBSYSTEM=="net", ACTION=="add", ATTR{address}=="0a:57:5b:00:df:ce", NAME="enx_olive_cam"
+SUBSYSTEM=="net", ACTION=="add", ATTR{address}=="a2:10:11:e2:ae:4e", NAME="enx_olive_imu"
+#SUBSYSTEM=="net", ACTION=="add", ATTR{address}=="...", NAME="enx_olive_imu2"
+#SUBSYSTEM=="net", ACTION=="add", ATTR{address}=="...", NAME="enx_olive_imu3"
+

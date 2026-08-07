@@ -1,0 +1,20 @@
+visual_slam_node:
+  ros__parameters:
+    use_sim_time: true
+    enable_image_denoising: false
+    rectified_images: false # 'true' if image rectified by image_proc
+    enable_slam: true
+    enable_imu_fusion: true
+    
+    # Configuration Monocular + IMU
+    camera_optical_frames: ["olivecam_optical_frame"]
+    imu_frame: "imu_link"
+    base_frame: "base_link"
+    odom_frame: "odom_vslam" 
+    map_frame: "map_vslam"
+    
+    # Desactivate the TF global publication if you compare this to UKF
+    publish_odom_to_base_tf: false
+    publish_map_to_odom_tf: false
+
+#============================FOR LATER=================================

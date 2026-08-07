@@ -1,0 +1,71 @@
+%YAML:1.0
+
+imu0:
+  T_i_b:
+      - [1.0, 0.0, 0.0, 0.0]
+      - [0.0, 1.0, 0.0, 0.0]
+      - [0.0, 0.0, 1.0, 0.0]
+      - [0.0, 0.0, 0.0, 1.0]
+  # Values from allan plots of ~20hour dataset
+  # Inflated values (to account for unmodelled effects)
+  #  - white noise multiplied by 5
+  #  - bias random walk multiplied by 10
+  #accelerometer_noise_density: 0.013307796
+  #accelerometer_random_walk: 0.00291178331237873
+  #gyroscope_noise_density: 0.00019789082
+  #gyroscope_random_walk: 2.7958932684593065e-06
+  
+  
+  #Test
+  accelerometer_noise_density: 0.01373676763
+  accelerometer_random_walk: 0.0005624771742904598
+  gyroscope_noise_density: 0.00097604109
+  gyroscope_random_walk: 1.4185449668488343e-05
+  
+  model: kalibr
+  rostopic: /d435/d435_node/imu
+  time_offset: 0.0
+  update_rate: 200
+  # three different modes supported:
+  # "calibrated" (same as "kalibr"), "kalibr", "rpng"
+  #model: "kalibr"
+  # how to get from Kalibr imu.yaml result file:
+  #   - Tw is imu0:gyroscopes:M:
+  #   - R_IMUtoGYRO: is imu0:gyroscopes:C_gyro_i:
+  #   - Ta is imu0:accelerometers:M:
+  #   - R_IMUtoACC not used by Kalibr
+  #   - Tg is imu0:gyroscopes:A:
+  Tw:
+      - [0.9964464280063343, 0.0, 0.0]
+      - [0.0011406112651474746, 0.9895147732255839, 0.0]
+      - [-0.0013848189754408987, 0.0019274076291287833, 1.0007227798082419]
+
+  R_IMUtoGYRO:
+      - [0.9999858742891563, 0.004687298741214516, -0.002506083131776854]
+      - [-0.004682900889523271, 0.9999874900914467, 0.001757867989551664]
+      - [0.002514291433320694, -0.001746107419489724, 0.9999953147127585]
+
+  Ta:
+      - [1.0004856977795848, 0.0, 0.0]
+      - [-0.053873237900176195, 1.0022390500969576, 0.0]
+      - [-1.7251242893150113e-05, 0.0037121795806156445, 0.9996892830190011]
+ 
+  R_IMUtoACC:
+      - [1.0, 0.0, 0.0]
+      - [0.0, 1.0, 0.0]
+      - [0.0, 0.0, 1.0]
+
+  Tg:
+      - [0.00019587123800969493, -0.0005248999077666065, 0.00034150405352878613]
+      - [0.0005704556547982573, 0.0005293114693169516, 0.00012377436133702172]
+      - [-0.00038320347618273846, -0.001393387002133468, 0.0001153056777554264]
+     
+      
+      
+      
+      
+      
+      
+      
+
+

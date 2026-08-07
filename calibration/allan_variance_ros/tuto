@@ -1,0 +1,31 @@
+colcon build
+source install/setup.bash
+SO_DIR=$(dirname $(find ~/aw_ws -name "liballan_variance_ros2.so" | head -n 1))
+export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$SO_DIR
+ros2 run allan_variance_ros2 allan_variance ./dataset_imu ./config.yaml
+
+sudo apt update
+sudo apt install ros-humble-rosbag2-storage-mcap -y
+
+cat << EOF > convert.yaml
+output_bags:
+  - uri: dataset_imu_mcap
+    storage_id: mcap
+EOF
+
+ros2 bag convert -i ./dataset_imu -o convert.yaml
+
+ros2 bag record -s mcap /olive/olixSense/x1/oliveimu/imu -o dataset_cam3
+
+ros2 run allan_variance_ros2 allan_variance ./dataset_imu_mcap ./config.yaml
+
+python3 ./src/allan_variance_ros2/src/allan_variance_ros2/scripts/analysis.py --data ./data/output/allan_variance.csv
+
+
+
+
+
+ros2 run allan_variance_ros2 allan_variance ./cam_dataset1 ./config2.yaml
+
+python3 ./src/allan_variance_ros2/src/allan_variance_ros2/scripts/analysis.py --data ./data/output2/allan_variance.csv
+

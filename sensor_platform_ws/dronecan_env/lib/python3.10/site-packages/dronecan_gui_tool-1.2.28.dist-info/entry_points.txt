@@ -1,0 +1,2 @@
+[gui_scripts]
+dronecan_gui_tool = dronecan_gui_tool.main:main

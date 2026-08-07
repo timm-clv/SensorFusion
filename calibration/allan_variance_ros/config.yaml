@@ -1,0 +1,5 @@
+imu_topic: "/d435/d435_node/imu"
+imu_rate: 200
+measure_rate: 100
+sequence_duration: 88916 #60855
+sequence_offset: 0

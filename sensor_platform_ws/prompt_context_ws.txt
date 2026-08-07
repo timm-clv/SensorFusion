@@ -1,0 +1,3143 @@
+=== STRUCTURE DU WORKSPACE ===
+src/
+├── hardware
+│   └── uavcan_bridge
+│       ├── CMakeLists.txt
+│       ├── package.xml
+│       └── src
+│           └── dronecan_bridge_component.cpp
+├── olive_networking
+│   ├── CMakeLists.txt
+│   ├── config
+│   │   └── fastdds_profiles.xml
+│   ├── package.xml
+│   ├── rules
+│   │   └── 99-olive-networking.rules
+│   ├── scripts
+│   │   ├── install_rules.sh
+│   │   └── olive_network_configuration.sh
+│   └── src
+├── platform_bringup
+│   ├── CMakeLists.txt
+│   ├── config
+│   │   ├── ekf.yaml
+│   │   ├── inekf.yaml
+│   │   ├── isaac_vslam.yaml
+│   │   ├── rs_custom
+│   │   │   ├── estimator_config.yaml
+│   │   │   ├── kalibr_imucam_chain.yaml
+│   │   │   ├── kalibr_imu_chain.yaml
+│   │   │   ├── launch_t265.example
+│   │   │   ├── mask_t265_cam0.png
+│   │   │   ├── mask_t265_cam0.xcf
+│   │   │   ├── mask_t265_cam1.png
+│   │   │   └── mask_t265_cam1.xcf
+│   │   └── ukf.yaml
+│   ├── launch
+│   │   ├── can_allocator.py
+│   │   ├── custom_vslam.launch.py
+│   │   ├── decompressor.py
+│   │   ├── openvins.launch.py
+│   │   ├── record_dataset.launch.py
+│   │   ├── system.launch.py
+│   │   ├── test_hflow.launch.py
+│   │   └── ukf_fusion.launch.py
+│   ├── package.xml
+│   └── src
+├── platform_description
+│   ├── CMakeLists.txt
+│   ├── launch
+│   │   └── display.launch.py
+│   ├── package.xml
+│   ├── rviz
+│   ├── src
+│   └── urdf
+│       └── sensor_platform.urdf.xacro
+├── platform_interfaces
+│   ├── CMakeLists.txt
+│   ├── package.xml
+│   └── src
+└── platform_processing
+    ├── CMakeLists.txt
+    ├── package.xml
+    ├── scripts
+    │   └── mock_imu_node.py
+    └── src
+        └── imu_sync_component.cpp
+
+23 directories, 41 files
+
+
+=== CONTENU DES FICHIERS SOURCES ===
+
+
+--------------------------------------------------
+FICHIER : src/olive_networking/CMakeLists.txt
+--------------------------------------------------
+cmake_minimum_required(VERSION 3.8)
+project(olive_networking)
+
+if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+  add_compile_options(-Wall -Wextra -Wpedantic)
+endif()
+
+# find dependencies
+find_package(ament_cmake REQUIRED)
+
+
+
+# Thank's Gemini :
+if(BUILD_TESTING)
+  find_package(ament_lint_auto REQUIRED)
+  # the following line skips the linter which checks for copyrights
+  # comment the line when a copyright and license is added to all source files
+  set(ament_cmake_copyright_FOUND TRUE)
+  # the following line skips cpplint (only works in a git repo)
+  # comment the line when this package is in a git repo and when
+  # a copyright and license is added to all source files
+  set(ament_cmake_cpplint_FOUND TRUE)
+  ament_lint_auto_find_test_dependencies()
+endif()
+
+
+# Install udev in shared repository
+install(FILES
+  rules/99-olive-networking.rules
+  DESTINATION share/${PROJECT_NAME}/udev
+)
+
+# Make the script executable and put it in the good place
+install(PROGRAMS
+  scripts/olive_network_configuration.sh
+  DESTINATION lib/${PROJECT_NAME}/scripts
+)
+
+# install config repo 
+install(DIRECTORY config
+  DESTINATION share/${PROJECT_NAME}
+)
+
+
+ament_package()
+
+
+--------------------------------------------------
+FICHIER : src/olive_networking/scripts/install_rules.sh
+--------------------------------------------------
+#!/bin/bash
+
+
+# Has been lunched one time at the begining
+# Better to not lunch it again
+
+echo "Deploying udev rules (Olive Sensors) to the system..."
+
+# Copy the workspace file to the system directory
+sudo cp $(dirname "$0")/../rules/99-olive-networking.rules /etc/udev/rules.d/
+
+echo "Reloading udev rules..."
+sudo udevadm control --reload-rules
+sudo udevadm trigger --subsystem-match=net
+
+echo "Installation completed successfully"
+
+
+--------------------------------------------------
+FICHIER : src/olive_networking/scripts/olive_network_configuration.sh
+--------------------------------------------------
+#!/bin/bash
+
+
+# Has been lunched one time at the begining
+# Better to not lunch it again
+
+
+# script for configuring a persistent static IP 
+
+
+# Checking root privileges
+if [[ $EUID -ne 0 ]]; then
+   echo "[ERROR] This script must be run as root (sudo)"
+   exit 1
+fi
+
+echo "-> Disabling Reverse Path Filtering for Asymmetric DDS Routing..."
+sysctl -w net.ipv4.conf.all.rp_filter=2
+sysctl -w net.ipv4.conf.default.rp_filter=2
+sysctl -w net.ipv4.conf.enx_olive_cam.rp_filter=2
+sysctl -w net.ipv4.conf.enx_olive_imu.rp_filter=2
+
+echo "-> optimization of receive and transmit buffers (FastDDS / Video Stream)..."
+sysctl -w net.core.rmem_max=8388608
+sysctl -w net.core.rmem_default=8388608
+sysctl -w net.core.wmem_max=8388608
+sysctl -w net.core.wmem_default=8388608
+
+# Interface Configuration 
+IF_CAMERA="enx_olive_cam" #"enx0a575b00dfce"
+IF_IMU1="enx_olive_imu" #"enxa21011e2ae4e"
+# Maybe in the futur
+#IF_IMU2="enx_olive_imu2"
+#IF_IMU3="enx_olive_imu3"
+
+# static IP addresses assigned to the Jetson on these subnets
+IP_CAMERA="192.168.7.101/24"
+IP_IMU1="192.168.8.102/24"
+#IP_IMU2="192.168.7.103/24"
+#IP_IMU3="192.168.7.104/24"
+
+
+
+echo "Starting the network configuration for the sensor platform..."
+
+configure_interface() {
+    local iface=$1
+    local ip=$2
+    local con_name="Olive_${iface}"
+
+    echo "-> Configuration of $iface with IP $ip..."
+
+    #  Delete the old connection, if it exists, to avoid conflicts
+    if nmcli con show "$con_name" >/dev/null 2>&1; then
+        nmcli con delete "$con_name" >/dev/null
+    fi
+
+    # Create the new static connection
+    nmcli con add type ethernet ifname "$iface" con-name "$con_name" ipv4.method manual ipv4.addresses "$ip" >/dev/null
+
+    # Disable IPv6 (not needed for local DDS traffic from sensors)
+    nmcli con modify "$con_name" ipv6.method disabled
+
+    #Apply and activate the connection
+    nmcli con up "$con_name" >/dev/null
+    
+    ip link set dev "$iface" mtu 8000
+
+    echo "   [OK] $iface configured ($con_name)."
+}
+
+echo "-> Adding multicast routes (ROS 2) for subnets..."
+ip route add 224.0.0.0/4 dev enx_olive_cam metric 100
+ip route add 224.0.0.0/4 dev enx_olive_imu metric 101
+
+# Application on sensors
+configure_interface $IF_CAMERA $IP_CAMERA
+configure_interface $IF_IMU1 $IP_IMU1
+#configure_interface $IF_IMU2 $IP_IMU2
+#configure_interface $IF_IMU3 $IP_IMU3
+
+echo "=================================================="
+echo "Verification:"
+ip -4 addr show $IF_CAMERA
+ip -4 addr show $IF_IMU1
+#ip -4 addr show $IF_IMU2
+#ip -4 addr show $IF_IMU3
+echo "=================================================="
+
+
+--------------------------------------------------
+FICHIER : src/olive_networking/config/fastdds_profiles.xml
+--------------------------------------------------
+<?xml version="1.0" encoding="UTF-8" ?>
+<dds>
+    <profiles xmlns="http://www.eprosima.com/XMLSchemas/fastRTPS_Profiles">
+        <transport_descriptors>
+            <transport_descriptor>
+                <transport_id>udp_transport_olive</transport_id>
+                <type>UDPv4</type>
+                <sendBufferSize>8388608</sendBufferSize>
+                <receiveBufferSize>16777216</receiveBufferSize>
+                <interfaceWhiteList>
+                    <address>127.0.0.1</address>
+                    <address>192.168.7.101</address>  
+                    <address>192.168.8.102</address>
+                    <address>192.168.0.105</address>
+                </interfaceWhiteList>
+            </transport_descriptor>
+        </transport_descriptors>
+
+        <participant profile_name="olive_participant_profile" is_default_profile="true">
+            <rtps>
+                <userTransports>
+                    <transport_id>udp_transport_olive</transport_id>
+                </userTransports>
+                <useBuiltinTransports>false</useBuiltinTransports>
+                <builtin>
+                    <discovery_config>
+                        <leaseDuration><sec>DURATION_INFINITY</sec></leaseDuration>
+                    </discovery_config>
+                </builtin>
+            </rtps>
+        </participant>
+    </profiles>
+</dds>
+
+
+--------------------------------------------------
+FICHIER : src/olive_networking/package.xml
+--------------------------------------------------
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>olive_networking</name>
+  <version>0.0.0</version>
+  <description>TODO: Package description</description>
+  <maintainer email="student@todo.todo">student</maintainer>
+  <license>TODO: License declaration</license>
+
+  <buildtool_depend>ament_cmake</buildtool_depend>
+
+  <test_depend>ament_lint_auto</test_depend>
+  <test_depend>ament_lint_common</test_depend>
+
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>
+
+
+--------------------------------------------------
+FICHIER : src/hardware/uavcan_bridge/CMakeLists.txt
+--------------------------------------------------
+cmake_minimum_required(VERSION 3.8)
+project(uavcan_bridge)
+
+if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+  add_compile_options(-Wall -Wextra -Wpedantic)
+endif()
+
+# look for dependancies
+find_package(ament_cmake REQUIRED)
+find_package(rclcpp REQUIRED)
+find_package(rclcpp_components REQUIRED)
+find_package(geometry_msgs REQUIRED)
+find_package(sensor_msgs REQUIRED) 
+find_package(tf2 REQUIRED)
+
+include_directories(include/libcanard)
+
+# shared librairy (ROS2)
+add_library(dronecan_bridge_component SHARED 
+  src/dronecan_bridge_component.cpp
+  include/libcanard/canard.c
+)
+
+target_compile_features(dronecan_bridge_component PUBLIC c_std_99 cxx_std_17)
+
+# link .ccp to its dependancies
+ament_target_dependencies(dronecan_bridge_component 
+  rclcpp 
+  rclcpp_components 
+  geometry_msgs 
+  sensor_msgs
+  tf2
+)
+
+# executable to test the CAN bridge + register Plugin zero copy (= Compilation in a Shared Library + Shared Memory Space + Pointer Passing)
+rclcpp_components_register_node(dronecan_bridge_component 
+  PLUGIN "uavcan_bridge::DronecanBridgeComponent" 
+  EXECUTABLE dronecan_bridge_node
+)
+
+
+install(TARGETS
+  dronecan_bridge_component
+  ARCHIVE DESTINATION lib
+  LIBRARY DESTINATION lib
+  RUNTIME DESTINATION bin
+)
+
+ament_export_dependencies(rclcpp rclcpp_components geometry_msgs sensor_msgs)
+ament_package()
+
+
+--------------------------------------------------
+FICHIER : src/hardware/uavcan_bridge/src/dronecan_bridge_component.cpp
+--------------------------------------------------
+#include <rclcpp/rclcpp.hpp>
+#include <geometry_msgs/msg/twist_with_covariance_stamped.hpp>
+#include <geometry_msgs/msg/pose_with_covariance_stamped.hpp>
+#include <sensor_msgs/msg/range.hpp>
+#include <linux/can.h>
+#include <linux/can/raw.h>
+#include <sys/socket.h>
+#include <sys/ioctl.h>
+#include <net/if.h>
+#include <unistd.h>
+#include <fcntl.h>
+#include <cstring>
+#include <thread>
+#include <atomic>
+#include <poll.h>
+#include <sensor_msgs/msg/imu.hpp>
+#include <tf2/LinearMath/Matrix3x3.h>
+#include <array>
+#include <algorithm>
+
+// DroneCAN IDs
+#define UAVCAN_EQUIPMENT_OPTICAL_FLOW_ID 20200
+#define UAVCAN_EQUIPMENT_RANGE_SENSOR_ID 1050
+
+
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wpedantic"
+#include <canard.h>
+#pragma GCC diagnostic pop
+
+namespace uavcan_bridge {
+
+
+template<typename T, size_t N = 10>
+class MedianFilter {
+public:
+    T update(T new_val) {
+        buf_[idx_] = new_val;
+        idx_ = (idx_ + 1) % N;
+        if (count_ < N) count_++;
+        std::array<T, N> tmp;
+        std::copy(buf_.begin(), buf_.begin() + count_, tmp.begin());
+        std::sort(tmp.begin(), tmp.begin() + count_);
+        return tmp[count_ / 2];
+    }
+private:
+    std::array<T, N> buf_{};
+    size_t idx_ = 0, count_ = 0;
+};
+
+
+class DronecanBridgeComponent;
+
+//def
+bool shouldAcceptTransfer(const CanardInstance* ins, uint64_t* out_data_type_signature, uint16_t data_type_id, CanardTransferType transfer_type, uint8_t source_node_id);
+void onTransferReceived(CanardInstance* ins, CanardRxTransfer* transfer);
+
+// class
+class DronecanBridgeComponent : public rclcpp::Node {
+public:
+    // EMA smoothing parameter (0.0 = frozen, 1.0 = raw data)
+    // 0.2 effectively filters out optical noise
+    float ema_alpha_ = 0.2f; 
+    float z_filtered_ = -1.0f; // Initialisation
+    float current_distance_z_ = 0.0f;
+    DronecanBridgeComponent(const rclcpp::NodeOptions & options)
+    : Node("dronecan_bridge", options) {
+        
+        this->declare_parameter<std::string>("can_interface", "slcan0");
+        auto can_iface = this->get_parameter("can_interface").as_string();
+
+        //initializing publishers
+        flow_pub_ = this->create_publisher<geometry_msgs::msg::TwistWithCovarianceStamped>("/optical_flow/velocity", rclcpp::QoS(10));
+        range_pub_ = this->create_publisher<geometry_msgs::msg::PoseWithCovarianceStamped>("/optical_flow/range", rclcpp::QoS(10));
+
+        canardInit(&canard_, canard_memory_pool_, sizeof(canard_memory_pool_), onTransferReceived, shouldAcceptTransfer, this);
+        canardSetLocalNodeID(&canard_, 127); // The Jetson has the ID 127
+
+        if (!init_socketcan(can_iface)) {
+            RCLCPP_FATAL(this->get_logger(), "Impossible to open the bus CAN: %s", can_iface.c_str());
+            throw std::runtime_error("CAN Init Failed");
+        }
+
+        is_running_ = true;
+        rx_thread_ = std::thread(&DronecanBridgeComponent::can_rx_loop, this);
+        
+        
+        imu_sub_ = this->create_subscription<sensor_msgs::msg::Imu>(
+            "/olive/olixSense/x1/oliveimu/imu", rclcpp::SensorDataQoS(),
+            [this](const sensor_msgs::msg::Imu::SharedPtr msg) {
+                tf2::Quaternion q(msg->orientation.x, msg->orientation.y, msg->orientation.z, msg->orientation.w);
+                double r_imu, p_imu, y_imu;
+                tf2::Matrix3x3(q).getRPY(r_imu, p_imu, y_imu);
+
+                // IMU gas a 90 deg rotation in .xacro
+                float drone_roll = static_cast<float>(-p_imu);
+                float drone_pitch = static_cast<float>(r_imu);
+
+                roll_.store(drone_roll);
+                pitch_.store(drone_pitch);
+            });
+
+        RCLCPP_INFO(this->get_logger(), "DroneCAN Bridge active on %s (Threaded). Ready for Flow and Range!", can_iface.c_str());
+    }
+
+    ~DronecanBridgeComponent() { 
+        is_running_ = false;
+        if (rx_thread_.joinable()) {
+            rx_thread_.join();
+        }
+        if (socket_fd_ >= 0) close(socket_fd_);
+    }
+
+    void publish_flow_data(float x, float y, float cov, uint64_t hardware_timestamp_usec) {
+        auto msg = geometry_msgs::msg::TwistWithCovarianceStamped();
+        
+        // time synchro + id + cov
+        msg.header.stamp = this->now();
+        //msg.header.stamp = rclcpp::Time(hardware_timestamp_usec * 1000ULL, RCL_SYSTEM_TIME);
+        msg.header.frame_id = "optical_flow_link";
+        msg.twist.twist.linear.x = x;
+        msg.twist.twist.linear.y = y;
+        msg.twist.covariance[0]  = cov;
+        msg.twist.covariance[7]  = cov;
+        msg.twist.covariance[14] = 10000.0;
+        msg.twist.covariance[21] = 10000.0;
+        msg.twist.covariance[28] = 10000.0;
+        msg.twist.covariance[35] = 10000.0;       
+        flow_pub_->publish(msg);
+        (void)hardware_timestamp_usec;
+    }
+    
+
+    void publish_range_data(float distance, uint64_t hardware_timestamp_usec) {
+        float r = this->roll_.load();
+        float p = this->pitch_.load();
+        float z_sensor = distance * cosf(r) * cosf(p);
+        current_distance_z_ = z_sensor;
+        // H-Flow offset by the URDF : X = 0.17, Z = -0.0225
+        float z_base_link = z_sensor + (0.17f * sinf(p)) + (0.0225f * cosf(r) * cosf(p));
+        
+        if (z_filtered_ < 0.0f) {
+            z_filtered_ = z_base_link; 
+        } else {
+            z_filtered_ = ema_alpha_ * z_base_link + (1.0f - ema_alpha_) * z_filtered_;
+        }
+        
+        
+        auto msg = geometry_msgs::msg::PoseWithCovarianceStamped();
+        msg.pose.pose.orientation.w = 1.0;// quaternion (0,0,0,0) do crash the UKF so we give him an orientation at the start
+        msg.header.stamp = this->now(); // time synchro + id + cov
+        //msg.header.stamp = rclcpp::Time(hardware_timestamp_usec * 1000ULL, RCL_SYSTEM_TIME);
+        msg.header.frame_id = "odom"; // or "optical_flow_link"; // base_link
+        msg.pose.pose.position.z = z_filtered_; 
+        msg.pose.covariance[0]  = 10000.0;
+        msg.pose.covariance[7]  = 10000.0;
+        msg.pose.covariance[14] = 0.001; // Cov on z
+        msg.pose.covariance[21] = 10000.0;
+        msg.pose.covariance[28] = 10000.0;
+        msg.pose.covariance[35] = 10000.0;
+        range_pub_->publish(msg);
+        (void)hardware_timestamp_usec;
+    }
+    
+    std::atomic<float> roll_{0.0f}, pitch_{0.0f};
+    rclcpp::Subscription<sensor_msgs::msg::Imu>::SharedPtr imu_sub_;
+    MedianFilter<float> vx_filter_, vy_filter_, range_filter_;
+
+
+
+
+private:
+    int socket_fd_;
+    rclcpp::Publisher<geometry_msgs::msg::TwistWithCovarianceStamped>::SharedPtr flow_pub_;
+    rclcpp::Publisher<geometry_msgs::msg::PoseWithCovarianceStamped>::SharedPtr range_pub_;
+    
+    std::thread rx_thread_;
+    std::atomic<bool> is_running_;
+    CanardInstance canard_;
+    alignas(8) uint8_t canard_memory_pool_[16384]; 
+
+    bool init_socketcan(const std::string& iface_name) {
+        struct sockaddr_can addr; struct ifreq ifr;
+        socket_fd_ = socket(PF_CAN, SOCK_RAW, CAN_RAW);
+        if (socket_fd_ < 0) return false;
+        std::strncpy(ifr.ifr_name, iface_name.c_str(), IFNAMSIZ - 1);
+        ifr.ifr_name[IFNAMSIZ - 1] = '\0';
+        if (ioctl(socket_fd_, SIOCGIFINDEX, &ifr) < 0) return false;
+        addr.can_family = AF_CAN; addr.can_ifindex = ifr.ifr_ifindex;
+        int flags = fcntl(socket_fd_, F_GETFL, 0); fcntl(socket_fd_, F_SETFL, flags | O_NONBLOCK);
+        int timestamp_on = 1;
+        if (setsockopt(socket_fd_, SOL_SOCKET, SO_TIMESTAMP, &timestamp_on, sizeof(timestamp_on)) < 0) {
+            RCLCPP_WARN(this->get_logger(), "Failed to enable SO_TIMESTAMP");
+        }
+
+        if (bind(socket_fd_, (struct sockaddr *)&addr, sizeof(addr)) < 0) return false;
+        return true;
+    }
+    
+    // listen frame of Hflow + extract timestamp + send all of this to libcanard
+    void can_rx_loop() { 
+        struct pollfd pfd;
+        pfd.fd = socket_fd_;
+        pfd.events = POLLIN;
+
+        struct can_frame frame;
+        struct iovec iov;
+        struct msghdr msg;
+        char ctrlmsg[CMSG_SPACE(sizeof(struct timeval))];
+
+        iov.iov_base = &frame;
+        iov.iov_len = sizeof(frame);
+
+        msg.msg_name = nullptr;
+        msg.msg_namelen = 0;
+        msg.msg_iov = &iov;
+        msg.msg_iovlen = 1;
+        msg.msg_control = ctrlmsg;
+        msg.msg_controllen = sizeof(ctrlmsg);
+
+        while (is_running_) {
+            int ret = poll(&pfd, 1, 100);
+
+            if (ret > 0 && (pfd.revents & POLLIN)) {
+                while (recvmsg(socket_fd_, &msg, 0) > 0) {
+                    
+                    uint64_t timestamp_usec = 0;
+                    struct cmsghdr *cmsg;
+                    for (cmsg = CMSG_FIRSTHDR(&msg); cmsg != nullptr; cmsg = CMSG_NXTHDR(&msg, cmsg)) {
+                        if (cmsg->cmsg_level == SOL_SOCKET && cmsg->cmsg_type == SO_TIMESTAMP) {
+                            struct timeval *tv = (struct timeval *)CMSG_DATA(cmsg);
+                            timestamp_usec = static_cast<uint64_t>(tv->tv_sec) * 1000000ULL + tv->tv_usec;
+                            break;
+                        }
+                    }
+                    if (timestamp_usec == 0) {
+                        timestamp_usec = std::chrono::duration_cast<std::chrono::microseconds>(
+                            std::chrono::system_clock::now().time_since_epoch()).count();
+                    }
+
+                    CanardCANFrame canard_frame;
+                    canard_frame.id = frame.can_id;
+                    canard_frame.data_len = frame.can_dlc;
+                    std::memcpy(canard_frame.data, frame.data, frame.can_dlc);
+
+                    canardHandleRxFrame(&canard_, &canard_frame, timestamp_usec);
+                }
+            }
+        }
+    }
+
+};
+
+//CALLBACKS LIBCANARD -> traduction of bytes in values
+bool shouldAcceptTransfer(const CanardInstance* ins, uint64_t* out_data_type_signature, uint16_t data_type_id, CanardTransferType transfer_type, uint8_t source_node_id) {
+    (void)ins; (void)transfer_type; (void)source_node_id;
+
+    if (data_type_id == UAVCAN_EQUIPMENT_OPTICAL_FLOW_ID) {
+        *out_data_type_signature = 0x6a908866bcb49c18ULL; // signatur Flow 
+        return true;
+    }
+    if (data_type_id == UAVCAN_EQUIPMENT_RANGE_SENSOR_ID) {
+        *out_data_type_signature = 0x68fffe70fc771952ULL; // signatur Telemeter
+        return true;
+    }
+    return false;
+}
+
+void onTransferReceived(CanardInstance* ins, CanardRxTransfer* transfer) {
+    auto* node = static_cast<DronecanBridgeComponent*>(ins->user_reference);
+
+// OPTICAL FLOW
+    if (transfer->data_type_id == UAVCAN_EQUIPMENT_OPTICAL_FLOW_ID && transfer->payload_len >= 21) {
+        
+        // declaration of the parameter
+        uint32_t dt_bits = 0, gyro_x_bits = 0, gyro_y_bits = 0, flow_x_bits = 0, flow_y_bits = 0;
+        uint8_t quality = 0;
+
+        // decoding binary struct (21 octets)
+        canardDecodeScalar(transfer, 0, 32, false, &dt_bits);      // integration_interval (Octets 0-3)
+        canardDecodeScalar(transfer, 32, 32, false, &gyro_x_bits); // rate_gyro_integral_x (Octets 4-7)
+        canardDecodeScalar(transfer, 64, 32, false, &gyro_y_bits); // rate_gyro_integral_y (Octets 8-11)
+        canardDecodeScalar(transfer, 96, 32, false, &flow_x_bits); // flow_integral_x (Octets 12-15)
+        canardDecodeScalar(transfer, 128, 32, false, &flow_y_bits);// flow_integral_y (Octets 16-19)
+        canardDecodeScalar(transfer, 160, 8, false, &quality);     // quality (Octet 20)
+
+        // conversion (bytes to floats)
+        float dt_sec, gyro_x_rad, gyro_y_rad, flow_x_rad, flow_y_rad;
+        std::memcpy(&dt_sec, &dt_bits, 4);
+        std::memcpy(&gyro_x_rad, &gyro_x_bits, 4);
+        std::memcpy(&gyro_y_rad, &gyro_y_bits, 4);
+        std::memcpy(&flow_x_rad, &flow_x_bits, 4);
+        std::memcpy(&flow_y_rad, &flow_y_bits, 4);
+        
+        //constexpr float QUALITY_MIN = 90.0f;   // caliber by change /optical_flow/quality on diverse textures max =255, From PX4 (LPE flow.cpp)
+        constexpr float DT_MIN = 1e-6f, DT_MAX = 0.5f;
+        constexpr float TILT_MAX = 0.5f;       // ~28.6°, comme PX4
+        
+        float roll = node->roll_.load();
+        float pitch = node->pitch_.load();
+
+        // calcul velocity with gyro moove
+        constexpr float QUALITY_FLOOR = 40.0f;  // below this threshold, data unusable even when weighted
+	if (quality >= QUALITY_FLOOR && dt_sec > DT_MIN && dt_sec < DT_MAX &&
+	    node->current_distance_z_ > 0.05f &&
+	    std::fabs(roll) < TILT_MAX && std::fabs(pitch) < TILT_MAX) {
+	    
+	    float raw_flow_rate_y = std::fabs(flow_y_rad - gyro_y_rad) / dt_sec; // rad/s
+	    float raw_flow_rate_x = std::fabs(flow_x_rad - gyro_x_rad) / dt_sec;
+	    constexpr float FLOW_RATE_MAX = 7.2f; // pysical limit of PAA3905
+	    
+	    if (raw_flow_rate_x < FLOW_RATE_MAX || raw_flow_rate_y < FLOW_RATE_MAX) {
+	    
+	        float d = node->current_distance_z_; // * cosf(roll) * cosf(pitch);
+		float vel_x = -((flow_y_rad - gyro_y_rad) / dt_sec) * d;
+		float vel_y = ((flow_x_rad - gyro_x_rad) / dt_sec) * d;
+
+		vel_x = node->vx_filter_.update(vel_x);
+		vel_y = node->vy_filter_.update(vel_y);
+
+		float base_cov = 0.2f;
+		float quality_factor = std::max(1.0f, 150.0f / static_cast<float>(quality));
+		node->publish_flow_data(vel_x, vel_y, quality_factor * base_cov, transfer->timestamp_usec);
+	    }
+	}
+    }
+    
+    // LASER RANGE 
+    else if (transfer->data_type_id == UAVCAN_EQUIPMENT_RANGE_SENSOR_ID && transfer->payload_len >= 15) {
+        
+        uint16_t range_bits = 0;
+        
+        // The ‘range’ field (float16) begins exactly at the 104th bit of the message
+        canardDecodeScalar(transfer, 104, 16, false, &range_bits);
+              
+        
+        // Converting CAN float16 to native C++ float32
+        float distance_m = canardConvertFloat16ToNativeFloat(range_bits);
+        //distance_m = node->range_filter_.update(distance_m);
+        
+        // The distance is only published if it is valid (the sensor returns 0.0 if it is out of range)
+	if (distance_m > 0.005f) {
+	    node->publish_range_data(distance_m, transfer->timestamp_usec);
+	}
+    }
+}
+} 
+
+#include "rclcpp_components/register_node_macro.hpp"
+RCLCPP_COMPONENTS_REGISTER_NODE(uavcan_bridge::DronecanBridgeComponent)
+
+
+--------------------------------------------------
+FICHIER : src/hardware/uavcan_bridge/package.xml
+--------------------------------------------------
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>uavcan_bridge</name>
+  <version>0.0.0</version>
+  <description>DroneCAN bridge for H-Flow sensor</description>
+  <maintainer email="student@todo.todo">student</maintainer>
+  <license>TODO: License declaration</license>
+  
+  <buildtool_depend>ament_cmake</buildtool_depend>
+
+  <depend>rclcpp</depend>
+  <depend>rclcpp_components</depend>
+  <depend>geometry_msgs</depend>
+  <depend>sensor_msgs</depend>
+  <depend>tf2</depend>
+
+  <test_depend>ament_lint_auto</test_depend>
+  <test_depend>ament_lint_common</test_depend>
+
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>
+
+
+--------------------------------------------------
+FICHIER : src/platform_interfaces/CMakeLists.txt
+--------------------------------------------------
+cmake_minimum_required(VERSION 3.8)
+project(platform_interfaces)
+
+if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+  add_compile_options(-Wall -Wextra -Wpedantic)
+endif()
+
+# find dependencies
+find_package(ament_cmake REQUIRED)
+find_package(rosidl_default_generators REQUIRED)
+
+if(BUILD_TESTING)
+  find_package(ament_lint_auto REQUIRED)
+  # the following line skips the linter which checks for copyrights
+  # comment the line when a copyright and license is added to all source files
+  set(ament_cmake_copyright_FOUND TRUE)
+  # the following line skips cpplint (only works in a git repo)
+  # comment the line when this package is in a git repo and when
+  # a copyright and license is added to all source files
+  set(ament_cmake_cpplint_FOUND TRUE)
+  ament_lint_auto_find_test_dependencies()
+endif()
+
+ament_package()
+
+
+--------------------------------------------------
+FICHIER : src/platform_interfaces/package.xml
+--------------------------------------------------
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>platform_interfaces</name>
+  <version>0.0.0</version>
+  <description>TODO: Package description</description>
+  <maintainer email="student@todo.todo">student</maintainer>
+  <license>TODO: License declaration</license>
+
+  <buildtool_depend>ament_cmake</buildtool_depend>
+
+  <depend>rosidl_default_generators</depend>
+
+  <test_depend>ament_lint_auto</test_depend>
+  <test_depend>ament_lint_common</test_depend>
+
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>
+
+
+--------------------------------------------------
+FICHIER : src/platform_description/CMakeLists.txt
+--------------------------------------------------
+cmake_minimum_required(VERSION 3.8)
+project(platform_description)
+
+if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+  add_compile_options(-Wall -Wextra -Wpedantic)
+endif()
+
+# find dependencies
+find_package(ament_cmake REQUIRED)
+
+
+if(BUILD_TESTING)
+  find_package(ament_lint_auto REQUIRED)
+  # the following line skips the linter which checks for copyrights
+  # comment the line when a copyright and license is added to all source files
+  set(ament_cmake_copyright_FOUND TRUE)
+  # the following line skips cpplint (only works in a git repo)
+  # comment the line when this package is in a git repo and when
+  # a copyright and license is added to all source files
+  set(ament_cmake_cpplint_FOUND TRUE)
+  ament_lint_auto_find_test_dependencies()
+endif()
+
+install(DIRECTORY urdf launch rviz
+  DESTINATION share/${PROJECT_NAME}
+)
+
+ament_package()
+
+
+--------------------------------------------------
+FICHIER : src/platform_description/launch/display.launch.py
+--------------------------------------------------
+
+# Give a display of the platform 
+# Great for visual debugging and publish transforms
+
+
+
+import os
+from ament_index_python.packages import get_package_share_directory
+from launch import LaunchDescription
+from launch_ros.actions import Node
+import xacro
+
+def generate_launch_description():
+    pkg_share = get_package_share_directory('platform_description')
+    
+    # Process the XACRO file
+    xacro_file = os.path.join(pkg_share, 'urdf', 'sensor_platform.urdf.xacro')
+    robot_description_raw = xacro.process_file(xacro_file).toxml()
+
+    return LaunchDescription([
+        # Node 1: Robot State Publisher (publishes static/dynamic TFs)
+        Node(
+            package='robot_state_publisher',
+            executable='robot_state_publisher',
+            name='robot_state_publisher',
+            output='screen',
+            parameters=[{'robot_description': robot_description_raw}]
+        ),        
+
+        # Node 2: RViz2
+        Node(
+            package='rviz2',
+            executable='rviz2',
+            name='rviz2',
+            output='screen'
+        )
+    ])
+
+
+--------------------------------------------------
+FICHIER : src/platform_description/package.xml
+--------------------------------------------------
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>platform_description</name>
+  <version>0.0.0</version>
+  <description>TODO: Package description</description>
+  <maintainer email="student@todo.todo">student</maintainer>
+  <license>TODO: License declaration</license>
+
+  <buildtool_depend>ament_cmake</buildtool_depend>
+
+  <test_depend>ament_lint_auto</test_depend>
+  <test_depend>ament_lint_common</test_depend>
+
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>
+
+
+--------------------------------------------------
+FICHIER : src/platform_description/urdf/sensor_platform.urdf.xacro
+--------------------------------------------------
+<?xml version="1.0"?>
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="drone_sensor_platform">
+
+
+
+
+
+
+<!-- In this file, we choose the position and orientation of each sensors 
+     Everything is made with translation with "<origin ...>"
+     Some of the position has been took buy calibration so don't change them
+     Each sensors has to be notified here
+     Critic points : check well the frame_id and child.frame_id of the topics,
+     if they are not corresponding to the one called here, there will be no Tf and the UKF not work well
+-->
+
+
+
+
+
+
+
+
+
+
+
+  <link name="base_link">
+    <visual>
+      <geometry>
+        <box size="0.48 0.03 0.03"/> 
+      </geometry>
+      <material name="alu_gray">
+        <color rgba="0.6 0.6 0.6 1.0"/>
+      </material>
+    </visual>
+  </link>
+  
+  
+  
+  
+  
+  
+  
+
+  <link name="jetson_link">
+    <visual>
+      <geometry>
+        <box size="0.103 0.0905 0.03477"/>
+      </geometry>
+      <material name="nvidia_green">
+        <color rgba="0.1 0.2 0.1 1.0"/>
+      </material>
+    </visual>
+  </link>
+
+  <joint name="base_to_jetson" type="fixed">
+    <parent link="base_link"/>
+    <child link="jetson_link"/>
+    <origin xyz="0.04 0.0 0.032385" rpy="0 0 0"/> 
+  </joint>
+  
+  
+  
+  
+  
+  
+  
+  
+  
+
+  <link name="imu_link">
+    <visual>
+      <geometry>
+        <box size="0.04 0.04 0.01"/>
+      </geometry>
+      <material name="dark_gray">
+        <color rgba="0.2 0.2 0.2 1.0"/>
+      </material>
+    </visual>
+  </link>
+
+  <joint name="base_to_olive_imu" type="fixed">
+    <parent link="base_link"/>
+    <child link="imu_link"/>
+    <origin xyz="0.17 0.0 0.02" rpy="0 0 ${pi/2}"/> 
+  </joint>
+  
+
+  <link name="oliveimu_base_link"/>
+  
+  <joint name="imu_to_oliveimu_bridge" type="fixed">
+    <parent link="imu_link"/>
+    <child link="oliveimu_base_link"/>
+    <origin xyz="0 0 0" rpy="0 0 0"/> 
+  </joint>
+  
+  
+  
+  
+  
+  
+
+  <link name="olivecam_link">
+    <visual>
+      <geometry>
+        <box size="0.038 0.038 0.024"/>
+      </geometry>
+      <material name="silver">
+        <color rgba="0.8 0.8 0.8 1.0"/>
+      </material>
+    </visual>
+  </link>
+
+  <joint name="base_to_olive_cam" type="fixed">
+    <parent link="base_link"/>
+    <child link="olivecam_link"/>
+    <origin xyz="-0.155 0.0 0.034" rpy="${-pi/2} ${-pi/2} 0"/> 
+  </joint>
+
+  <link name="olivecam_optical_frame"/>
+  <joint name="olivecam_link_to_optical" type="fixed">
+    <parent link="olivecam_link"/>
+    <child link="olivecam_optical_frame"/>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+  </joint>
+  
+  <link name="olivecam_imu_frame"/>
+  <joint name="olivecam_link_to_imu" type="fixed">
+    <parent link="olivecam_link"/>
+    <child link="olivecam_imu_frame"/>
+    <origin xyz="0 0 0" rpy="0 0 0"/> 
+  </joint>
+  
+  
+  
+  
+  
+  
+  
+  
+
+  <link name="optical_flow_link">
+    <visual>
+      <geometry>
+        <box size="0.03 0.03 0.015"/>
+      </geometry>
+      <material name="black">
+        <color rgba="0.1 0.1 0.1 1.0"/>
+      </material>
+    </visual>
+  </link>
+
+  <joint name="base_to_holybro_flow" type="fixed">
+    <parent link="base_link"/>
+    <child link="optical_flow_link"/>
+    <origin xyz="0.17 0.0 -0.0225" rpy="${pi} 0 ${-pi/2}"/> 
+  </joint>
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+
+
+  <xacro:include filename="$(find realsense2_description)/urdf/_d435i.urdf.xacro" />
+
+  <xacro:sensor_d435i parent="base_link" name="d435" use_nominal_extrinsics="true">
+    <origin xyz="-0.191 0.017 0.039" rpy="0 0 ${pi}"/>
+  </xacro:sensor_d435i>
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+</robot>
+
+
+--------------------------------------------------
+FICHIER : src/platform_processing/CMakeLists.txt
+--------------------------------------------------
+cmake_minimum_required(VERSION 3.8)
+project(platform_processing)
+
+if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+  add_compile_options(-Wall -Wextra -Wpedantic)
+endif()
+
+# find dependencies
+find_package(ament_cmake REQUIRED)
+find_package(rclcpp REQUIRED)
+find_package(sensor_msgs REQUIRED)
+find_package(message_filters REQUIRED)
+find_package(rclcpp_components REQUIRED)
+find_package(tf2 REQUIRED)
+find_package(tf2_geometry_msgs REQUIRED)
+
+
+if(BUILD_TESTING)
+  find_package(ament_lint_auto REQUIRED)
+  # the following line skips the linter which checks for copyrights
+  # comment the line when a copyright and license is added to all source files
+  set(ament_cmake_copyright_FOUND TRUE)
+  # the following line skips cpplint (only works in a git repo)
+  # comment the line when this package is in a git repo and when
+  # a copyright and license is added to all source files
+  set(ament_cmake_cpplint_FOUND TRUE)
+  ament_lint_auto_find_test_dependencies()
+endif()
+
+
+
+
+#-----------------------
+
+
+add_library(imu_sync_component SHARED
+  src/imu_sync_component.cpp
+)
+
+target_include_directories(imu_sync_component PUBLIC
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+  $<INSTALL_INTERFACE:include>
+)
+
+# link the dependencies
+ament_target_dependencies(imu_sync_component
+  rclcpp
+  sensor_msgs
+  message_filters
+  rclcpp_components
+)
+
+ament_target_dependencies(imu_sync_component
+  tf2
+  tf2_geometry_msgs
+)
+
+# Register the components in order to be visible by ROS 2
+rclcpp_components_register_node(imu_sync_component
+  PLUGIN "platform_processing::ImuSyncComponent"
+  EXECUTABLE imu_sync_node
+)
+
+# Installation (for "ros2 run" find it)
+install(TARGETS imu_sync_component
+  ARCHIVE DESTINATION lib
+  LIBRARY DESTINATION lib
+  RUNTIME DESTINATION bin
+)
+
+install(PROGRAMS scripts/mock_imu_node.py
+  DESTINATION lib/${PROJECT_NAME}
+)
+
+ament_package()
+
+
+--------------------------------------------------
+FICHIER : src/platform_processing/src/imu_sync_component.cpp
+--------------------------------------------------
+
+//=============================================
+//==========CALLED BY system.launch.py=========
+//==============================================
+
+
+// Called like a plugin with the apellation : platform_processing::ImuSyncComponent
+// Goal of the file is to synchronise the important topics of the IMU and also of the camera for the Olive sensors
+// We also inject the covariance measurement get by error measurement with AllanVariance or from the datasheet
+
+
+// A lot of the code is commented, you can uncomment depending of your necessity but Watchout CPU consommation
+
+
+
+#include <rclcpp/rclcpp.hpp>
+#include <sensor_msgs/msg/imu.hpp>
+#include <sensor_msgs/msg/compressed_image.hpp>
+#include <geometry_msgs/msg/pose_stamped.hpp>
+#include <geometry_msgs/msg/twist_stamped.hpp>
+#include <geometry_msgs/msg/accel_stamped.hpp>
+#include <sensor_msgs/msg/camera_info.hpp>
+#include <tf2_geometry_msgs/tf2_geometry_msgs.hpp>
+#include <sensor_msgs/msg/image.hpp>
+#include <message_filters/subscriber.h>
+#include <message_filters/sync_policies/approximate_time.h>
+#include <message_filters/synchronizer.h>
+
+namespace platform_processing
+{
+class ImuSyncComponent : public rclcpp::Node
+{
+public:
+  explicit ImuSyncComponent(const rclcpp::NodeOptions & options)
+  : Node("imu_sync_node", options)
+  {
+
+    
+    // Params declaration
+    this->declare_parameter("variance_orientation_rp", 0.000076); // 0.5° RMSE -> rad**2 Roll/Pitch -> 0.000076
+    this->declare_parameter("variance_orientation_y", 0.0012);    // < 2° RMSE -> rad**2 Yaw ->  0.0012
+    this->declare_parameter("variance_angular_velocity", 0.000177); // Gyroscopes = 0.013307796^2  = 0.000177
+    this->declare_parameter("variance_linear_acceleration", 0.001); // Accelerometers = (0.00019789082)^2 =0.0000000391607766
+    
+    var_ori_rp_ = this->get_parameter("variance_orientation_rp").as_double();
+    var_ori_y_ = this->get_parameter("variance_orientation_y").as_double();
+    var_ang_vel_ = this->get_parameter("variance_angular_velocity").as_double();
+    var_lin_acc_ = this->get_parameter("variance_linear_acceleration").as_double();
+    
+    // ==============================================================================
+    // 0. Main topics
+    // ==============================================================================
+    pub_imu_fused_ = this->create_publisher<sensor_msgs::msg::Imu>("/imu/fused", rclcpp::SensorDataQoS());
+    
+    sub_imu_ = this->create_subscription<sensor_msgs::msg::Imu>(
+      "/olive/olixSense/x1/oliveimu/imu", rclcpp::SensorDataQoS(), 
+      [this](sensor_msgs::msg::Imu::UniquePtr msg) {
+          this->imuCallback(std::move(msg));
+      });
+
+    pub_cam_synced_ = this->create_publisher<sensor_msgs::msg::CompressedImage>("/olivecam/image/compressed", rclcpp::SensorDataQoS());
+    
+    sub_cam_ = this->create_subscription<sensor_msgs::msg::CompressedImage>(
+      "/olive/camera/olivecam/image/compressed", rclcpp::SensorDataQoS(), 
+      [this](sensor_msgs::msg::CompressedImage::UniquePtr msg) {
+          this->camCallback(std::move(msg));
+      });
+      
+    // ==============================================================================
+    // REALSENSE : INFRA 1 & INFRA 2 
+    // ==============================================================================
+    //pub_rs_infra1_synced_ = this->create_publisher<sensor_msgs::msg::Image>("/d435/infra1_synced", rclcpp::SensorDataQoS());
+    //sub_rs_infra1_ = this->create_subscription<sensor_msgs::msg::Image>(
+    //  "/camera/d435_node/infra1/image_rect_raw", 10,
+    //  [this](sensor_msgs::msg::Image::UniquePtr msg) {
+    //    msg->header.stamp = applyCamOffset(msg->header.stamp); // Algned with Jetson timestamp
+    //    pub_rs_infra1_synced_->publish(std::move(msg));
+    //  });
+
+    //pub_rs_infra2_synced_ = this->create_publisher<sensor_msgs::msg::Image>("/d435/infra2_synced", rclcpp::SensorDataQoS());
+    //sub_rs_infra2_ = this->create_subscription<sensor_msgs::msg::Image>(
+    //  "/camera/d435_node/infra2/image_rect_raw", 10,
+    //  [this](sensor_msgs::msg::Image::UniquePtr msg) {
+    //    msg->header.stamp = applyCamOffset(msg->header.stamp); // Algned with Jetson timestamp
+    //    pub_rs_infra2_synced_->publish(std::move(msg));
+    //  });
+
+    // ==============================================================================
+    // 1. CAMERA : POSE & TWIST
+    // ==============================================================================
+    //pub_cam_pose_synced_ = this->create_publisher<geometry_msgs::msg::PoseStamped>("/olivecam/pose_synced", rclcpp::SensorDataQoS());
+    //sub_cam_pose_ = this->create_subscription<geometry_msgs::msg::PoseStamped>(
+    //  "/olive/camera/olivecam/pose", rclcpp::SensorDataQoS(), 
+    //  [this](geometry_msgs::msg::PoseStamped::UniquePtr msg) {
+     //   msg->header.stamp = applyCamOffset(msg->header.stamp);
+     //   msg->header.frame_id = "olivecam_imu_frame"; 
+     //   pub_cam_pose_synced_->publish(std::move(msg)); 
+     // });
+
+    //pub_cam_twist_synced_ = this->create_publisher<geometry_msgs::msg::TwistStamped>("/olivecam/twist_synced", rclcpp::SensorDataQoS());
+    //sub_cam_twist_ = this->create_subscription<geometry_msgs::msg::TwistStamped>(
+   //   "/olive/camera/olivecam/twist", rclcpp::SensorDataQoS(), 
+    //  [this](geometry_msgs::msg::TwistStamped::UniquePtr msg) {
+     //   msg->header.stamp = applyCamOffset(msg->header.stamp);
+    //    msg->header.frame_id = "olivecam_imu_frame"; 
+    //    pub_cam_twist_synced_->publish(std::move(msg)); 
+     // });
+
+    // ==============================================================================
+    // 2. CAMERA : ACCELERATION & AHRS
+    // ==============================================================================
+    //pub_cam_acc_synced_ = this->create_publisher<geometry_msgs::msg::AccelStamped>("/olivecam/linear_acc_synced", rclcpp::SensorDataQoS());
+    //sub_cam_acc_ = this->create_subscription<geometry_msgs::msg::AccelStamped>(
+    //  "/olive/camera/olivecam/linear_acc", rclcpp::SensorDataQoS(), 
+    //  [this](geometry_msgs::msg::AccelStamped::UniquePtr msg) {
+    //    msg->header.stamp = applyCamOffset(msg->header.stamp); 
+     //   msg->header.frame_id = "olivecam_imu_frame"; 
+    //    pub_cam_acc_synced_->publish(std::move(msg)); 
+    //  });
+
+    pub_cam_ahrs_synced_ = this->create_publisher<sensor_msgs::msg::Imu>("/olivecam/filtered_ahrs_synced", rclcpp::SensorDataQoS());
+    sub_cam_ahrs_ = this->create_subscription<sensor_msgs::msg::Imu>(
+      "/olive/camera/olivecam/filtered_ahrs", rclcpp::SensorDataQoS(), 
+        [this](sensor_msgs::msg::Imu::UniquePtr msg) {
+        msg->header.stamp = applyCamOffset(msg->header.stamp); 
+        msg->header.frame_id = "olivecam_imu_frame";    
+        pub_cam_ahrs_synced_->publish(std::move(msg)); 
+      });
+
+    // ==============================================================================
+    // 3. CAMERA : INFO 
+    // ==============================================================================
+    //pub_cam_info_synced_ = this->create_publisher<sensor_msgs::msg::CameraInfo>("/olivecam/camera_info_synced", rclcpp::SensorDataQoS());
+    //sub_cam_info_ = this->create_subscription<sensor_msgs::msg::CameraInfo>(
+    //  "/olive/camera/olivecam/image/camera_info", rclcpp::SensorDataQoS(), 
+    //    [this](sensor_msgs::msg::CameraInfo::UniquePtr msg) {
+    //    msg->header.stamp = applyCamOffset(msg->header.stamp); 
+    //    msg->header.frame_id = "olivecam_optical_frame"; 
+    //    pub_cam_info_synced_->publish(std::move(msg)); 
+    //  });
+
+    // ==============================================================================
+    // 4. IMU : ACCELERATION & SPEED
+    // ==============================================================================
+    //pub_imu_acc_synced_ = this->create_publisher<geometry_msgs::msg::AccelStamped>("/imu/acceleration_synced", rclcpp::SensorDataQoS());
+    //sub_imu_acc_ = this->create_subscription<geometry_msgs::msg::AccelStamped>(
+    //  "/olive/olixSense/x1/oliveimu/acceleration", rclcpp::SensorDataQoS(), 
+    //    [this](geometry_msgs::msg::AccelStamped::UniquePtr msg) {
+    //    msg->header.stamp = applyImuOffset(msg->header.stamp); 
+    //    msg->header.frame_id = "imu_link"; 
+    //    pub_imu_acc_synced_->publish(std::move(msg)); 
+    //  });
+
+    //pub_imu_vel_synced_ = this->create_publisher<geometry_msgs::msg::TwistStamped>("/imu/velocity_synced", rclcpp::SensorDataQoS());
+    //sub_imu_vel_ = this->create_subscription<geometry_msgs::msg::TwistStamped>(
+    //  "/olive/olixSense/x1/oliveimu/velocity", rclcpp::SensorDataQoS(),
+    //    [this](geometry_msgs::msg::TwistStamped::UniquePtr msg) {
+    //    msg->header.stamp = applyImuOffset(msg->header.stamp); 
+    //    msg->header.frame_id = "imu_link"; 
+    //    pub_imu_vel_synced_->publish(std::move(msg)); 
+    //  });
+      
+    // ==============================================================================
+    // TEST build topic imu raw for olivCam
+    // ==============================================================================
+    
+    //pub_cam_raw_imu_synced_ = this->create_publisher<sensor_msgs::msg::Imu>(
+    //  "/olivecam/imu_raw_synced", rclcpp::SensorDataQoS());
+
+    // Initialisation des abonnés message_filters (attention, pas de callback direct ici)
+    //rmw_qos_profile_t qos_profile = rmw_qos_profile_sensor_data;
+    //mf_sub_cam_acc_ = std::make_shared<message_filters::Subscriber<geometry_msgs::msg::AccelStamped>>(
+    //  this, "/olive/camera/olivecam/linear_acc", qos_profile);
+      
+    //mf_sub_cam_twist_ = std::make_shared<message_filters::Subscriber<geometry_msgs::msg::TwistStamped>>(
+    //  this, "/olive/camera/olivecam/twist", qos_profile);
+
+    // Initialisation du synchroniseur (Taille de la file d'attente = 10)
+    //sync_raw_imu_ = std::make_shared<message_filters::Synchronizer<SyncPolicyRawImu>>(
+    //  SyncPolicyRawImu(10), *mf_sub_cam_acc_, *mf_sub_cam_twist_);
+      
+    // Liaison du callback qui sera déclenché uniquement quand les deux messages sont appairés
+    //sync_raw_imu_->registerCallback(
+    //  std::bind(&ImuSyncComponent::rawImuMergeCallback, this, std::placeholders::_1, std::placeholders::_2));  
+      
+
+    RCLCPP_INFO(this->get_logger(), "Nœud de synchronisation actif : Offsets statiques verrouillés au premier message.");
+  }
+
+private:
+  // TEST (topic imu raw for olivCam):
+  
+  // synchronisation
+  //typedef message_filters::sync_policies::ApproximateTime<
+  //  geometry_msgs::msg::AccelStamped, 
+  //  geometry_msgs::msg::TwistStamped> SyncPolicyRawImu;
+
+  // subscribing
+  //std::shared_ptr<message_filters::Subscriber<geometry_msgs::msg::AccelStamped>> mf_sub_cam_acc_;
+  //std::shared_ptr<message_filters::Subscriber<geometry_msgs::msg::TwistStamped>> mf_sub_cam_twist_;
+  
+  // Le Synchroniseur
+  //std::shared_ptr<message_filters::Synchronizer<SyncPolicyRawImu>> sync_raw_imu_;
+  // Le nouveau Publisher pour l'IMU brut combiné
+  //rclcpp::Publisher<sensor_msgs::msg::Imu>::SharedPtr pub_cam_raw_imu_synced_;
+  
+  //void rawImuMergeCallback(
+  //  const geometry_msgs::msg::AccelStamped::ConstSharedPtr& acc_msg, 
+  //  const geometry_msgs::msg::TwistStamped::ConstSharedPtr& twist_msg)
+  //{
+  //  auto raw_imu_msg = sensor_msgs::msg::Imu();
+
+    // 1. Timestamp
+  //  raw_imu_msg.header.stamp = applyCamOffset(acc_msg->header.stamp);
+  //  raw_imu_msg.header.frame_id = "olivecam_imu_frame";
+
+    // 2. data extraction
+  //  constexpr double GRAVITY = 1; //9.80665;
+  //  raw_imu_msg.linear_acceleration.x = acc_msg->accel.linear.x * GRAVITY;
+  //  raw_imu_msg.linear_acceleration.y = acc_msg->accel.linear.y * GRAVITY;
+  //  raw_imu_msg.linear_acceleration.z = acc_msg->accel.linear.z * GRAVITY;
+  //  raw_imu_msg.angular_velocity = twist_msg->twist.angular;
+
+    // 3. Prevent zero quaternion
+  //  raw_imu_msg.orientation_covariance[0] = -1.0;
+
+    // 4. Covariance injection
+  //  raw_imu_msg.angular_velocity_covariance[0] = var_ang_vel_;
+  //  raw_imu_msg.angular_velocity_covariance[4] = var_ang_vel_;
+  //  raw_imu_msg.angular_velocity_covariance[8] = var_ang_vel_;
+    
+  //  raw_imu_msg.linear_acceleration_covariance[0] = var_lin_acc_;
+  //  raw_imu_msg.linear_acceleration_covariance[4] = var_lin_acc_;
+  //  raw_imu_msg.linear_acceleration_covariance[8] = var_lin_acc_;
+
+  //  pub_cam_raw_imu_synced_->publish(raw_imu_msg);
+  //}
+
+ 
+  double var_ori_rp_, var_ori_y_, var_ang_vel_, var_lin_acc_;
+
+  bool imu_offset_initialized_ = false;
+  rclcpp::Duration imu_time_offset_{0, 0};
+
+  bool cam_offset_initialized_ = false;
+  rclcpp::Duration cam_time_offset_{0, 0};
+
+  // Exponentially Weighted Average
+  // Filtering the signal from the USB transmission, digital low-pass filter
+  // Time stability preventing form abrupt time jumps with every received frame
+  // Stability for kalman filter (UKF or EKF or ...)
+  rclcpp::Time applyImuOffset(const builtin_interfaces::msg::Time & stamp)
+  {
+    rclcpp::Time msg_time(stamp);
+    rclcpp::Duration new_offset = this->now() - msg_time;
+
+    if (!imu_offset_initialized_) {
+      imu_time_offset_ = new_offset;
+      imu_offset_initialized_ = true;
+      RCLCPP_INFO(this->get_logger(), "Initial IMU time offset locked");
+    } else {
+      constexpr double alpha = 0.01; // Smoothing factor
+      imu_time_offset_ = rclcpp::Duration::from_nanoseconds(
+        (1.0 - alpha) * imu_time_offset_.nanoseconds() + alpha * new_offset.nanoseconds());
+    }
+    return msg_time + imu_time_offset_;
+  }
+
+  rclcpp::Time applyCamOffset(const builtin_interfaces::msg::Time & stamp)
+  {
+    rclcpp::Time msg_time(stamp);
+    rclcpp::Duration new_offset = this->now() - msg_time;
+
+    if (!cam_offset_initialized_) {
+      cam_time_offset_ = new_offset;
+      cam_offset_initialized_ = true;
+      RCLCPP_INFO(this->get_logger(), "Initial camera time offset locked");
+    } else {
+      constexpr double alpha = 0.01; // Smoothing factor
+      cam_time_offset_ = rclcpp::Duration::from_nanoseconds(
+        (1.0 - alpha) * cam_time_offset_.nanoseconds() + alpha * new_offset.nanoseconds());
+    }
+    return msg_time + cam_time_offset_;
+  }
+
+  // --- MAIN CALLBACKS ---
+  void imuCallback(sensor_msgs::msg::Imu::UniquePtr msg)
+  {
+    msg->header.stamp = applyImuOffset(msg->header.stamp);
+    msg->header.frame_id  = "imu_link";
+    
+    double var_ori_rp = this->get_parameter("variance_orientation_rp").as_double();
+    double var_ori_y = this->get_parameter("variance_orientation_y").as_double();
+    double var_ang_vel = this->get_parameter("variance_angular_velocity").as_double();
+    double var_lin_acc = this->get_parameter("variance_linear_acceleration").as_double();
+    
+    // if the quaternion is zero (norm of 0) :
+    if (msg->orientation.w == 0.0 && msg->orientation.x == 0.0 && 
+        msg->orientation.y == 0.0 && msg->orientation.z == 0.0) {
+        msg->orientation_covariance[0] = -1.0; 
+        msg->orientation.w = 1.0;
+        msg->orientation.x = 0.0;
+        msg->orientation.y = 0.0;
+        msg->orientation.z = 0.0;
+    } else {
+        msg->orientation_covariance[0] = var_ori_rp;
+        msg->orientation_covariance[4] = var_ori_rp;
+        msg->orientation_covariance[8] = var_ori_y;
+    }
+    
+    msg->angular_velocity_covariance[0] = var_ang_vel;
+    msg->angular_velocity_covariance[4] = var_ang_vel;
+    msg->angular_velocity_covariance[8] = var_ang_vel;
+    msg->linear_acceleration_covariance[0] = var_lin_acc;
+    msg->linear_acceleration_covariance[4] = var_lin_acc;
+    msg->linear_acceleration_covariance[8] = var_lin_acc;
+    
+    pub_imu_fused_->publish(std::move(msg));
+  }
+
+void camCallback(sensor_msgs::msg::CompressedImage::UniquePtr msg) {
+    msg->header.stamp = applyCamOffset(msg->header.stamp);
+    msg->header.frame_id = "olivecam_optical_frame";
+    pub_cam_synced_->publish(std::move(msg));
+}
+
+  // --- DECLARATIONS OF PUBLISHERS / SUBSCRIBERS ---
+  rclcpp::Subscription<sensor_msgs::msg::Imu>::SharedPtr sub_imu_;
+  rclcpp::Publisher<sensor_msgs::msg::Imu>::SharedPtr pub_imu_fused_;
+  
+  rclcpp::Subscription<sensor_msgs::msg::CompressedImage>::SharedPtr sub_cam_;
+  rclcpp::Publisher<sensor_msgs::msg::CompressedImage>::SharedPtr pub_cam_synced_;
+  
+  //rclcpp::Subscription<sensor_msgs::msg::Image>::SharedPtr sub_rs_infra1_;
+  //rclcpp::Publisher<sensor_msgs::msg::Image>::SharedPtr pub_rs_infra1_synced_;
+  
+  //rclcpp::Subscription<sensor_msgs::msg::Image>::SharedPtr sub_rs_infra2_;
+  //rclcpp::Publisher<sensor_msgs::msg::Image>::SharedPtr pub_rs_infra2_synced_;
+  
+  //rclcpp::Subscription<geometry_msgs::msg::PoseStamped>::SharedPtr sub_cam_pose_;
+  //rclcpp::Publisher<geometry_msgs::msg::PoseStamped>::SharedPtr pub_cam_pose_synced_;
+  
+  //rclcpp::Subscription<geometry_msgs::msg::TwistStamped>::SharedPtr sub_cam_twist_;
+  //rclcpp::Publisher<geometry_msgs::msg::TwistStamped>::SharedPtr pub_cam_twist_synced_;
+  
+  //rclcpp::Subscription<geometry_msgs::msg::AccelStamped>::SharedPtr sub_cam_acc_;
+  //rclcpp::Publisher<geometry_msgs::msg::AccelStamped>::SharedPtr pub_cam_acc_synced_;
+  
+  rclcpp::Subscription<sensor_msgs::msg::Imu>::SharedPtr sub_cam_ahrs_;
+  rclcpp::Publisher<sensor_msgs::msg::Imu>::SharedPtr pub_cam_ahrs_synced_;
+  
+  //rclcpp::Subscription<sensor_msgs::msg::CameraInfo>::SharedPtr sub_cam_info_;
+  //rclcpp::Publisher<sensor_msgs::msg::CameraInfo>::SharedPtr pub_cam_info_synced_;
+
+  //rclcpp::Subscription<geometry_msgs::msg::AccelStamped>::SharedPtr sub_imu_acc_;
+  //rclcpp::Publisher<geometry_msgs::msg::AccelStamped>::SharedPtr pub_imu_acc_synced_;
+  
+  //rclcpp::Subscription<geometry_msgs::msg::TwistStamped>::SharedPtr sub_imu_vel_;
+  //rclcpp::Publisher<geometry_msgs::msg::TwistStamped>::SharedPtr pub_imu_vel_synced_;
+};
+} 
+
+#include "rclcpp_components/register_node_macro.hpp"
+RCLCPP_COMPONENTS_REGISTER_NODE(platform_processing::ImuSyncComponent)
+
+
+--------------------------------------------------
+FICHIER : src/platform_processing/scripts/mock_imu_node.py
+--------------------------------------------------
+#!/usr/bin/env python3
+
+
+#===============================
+#======CALLED BY NOBODY==========
+#================================
+
+
+# Was used to learn how to handle multiple IMU publication
+# Not accurate in our actual setup
+# Can be deleted
+
+
+
+
+
+import rclpy
+from rclpy.node import Node
+from sensor_msgs.msg import Imu
+import random
+
+class MockImuNode(Node):
+    def __init__(self):
+        super().__init__('mock_imu_node')
+        
+        self.pub_olive = self.create_publisher(Imu, '/olive/imu/data', 10)
+        self.pub_xsens1 = self.create_publisher(Imu, '/xsens1/imu/data', 10)
+        self.pub_xsens2 = self.create_publisher(Imu, '/xsens2/imu/data', 10)
+        
+        self.timer = self.create_timer(0.002, self.timer_callback)
+        self.get_logger().info("Mock IMU Node démarré (1000 Hz).")
+
+    def timer_callback(self):
+        now = self.get_clock().now()
+        
+        self.publish_imu(self.pub_olive, now, 0.0)
+        
+        self.publish_imu(self.pub_xsens1, now, random.uniform(-0.0005, 0.0005))
+        self.publish_imu(self.pub_xsens2, now, random.uniform(-0.0005, 0.0005))
+
+    def publish_imu(self, publisher, base_time, jitter_sec):
+        msg = Imu()
+        
+        jittered_time = base_time.nanoseconds + int(jitter_sec * 1e9)
+        msg.header.stamp.sec = int(jittered_time // 1e9)
+        msg.header.stamp.nanosec = int(jittered_time % 1e9)
+        msg.header.frame_id = "mock_frame"
+        
+        msg.linear_acceleration.x = 9.81 + random.uniform(-0.1, 0.1)
+        
+        publisher.publish(msg)
+
+def main(args=None):
+    rclpy.init(args=args)
+    node = MockImuNode()
+    try:
+        rclpy.spin(node)
+    except KeyboardInterrupt:
+        pass
+    finally:
+        node.destroy_node()
+        rclpy.shutdown()
+
+if __name__ == '__main__':
+    main()
+
+
+--------------------------------------------------
+FICHIER : src/platform_processing/package.xml
+--------------------------------------------------
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>platform_processing</name>
+  <version>0.0.0</version>
+  <description>TODO: Package description</description>
+  <maintainer email="student@todo.todo">student</maintainer>
+  <license>TODO: License declaration</license>
+
+  <buildtool_depend>ament_cmake</buildtool_depend>
+
+  <depend>rclcpp</depend>
+  <depend>sensor_msgs</depend>
+  <depend>message_filters</depend>
+  <depend>rclcpp_components</depend>
+
+  <test_depend>ament_lint_auto</test_depend>
+  <test_depend>ament_lint_common</test_depend>
+
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>
+
+
+--------------------------------------------------
+FICHIER : src/platform_bringup/CMakeLists.txt
+--------------------------------------------------
+cmake_minimum_required(VERSION 3.8)
+project(platform_bringup)
+
+if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+  add_compile_options(-Wall -Wextra -Wpedantic)
+endif()
+
+# find dependencies
+find_package(ament_cmake REQUIRED)
+
+# Gemini infos :
+if(BUILD_TESTING)
+  find_package(ament_lint_auto REQUIRED)
+  # the following line skips the linter which checks for copyrights
+  # comment the line when a copyright and license is added to all source files
+  set(ament_cmake_copyright_FOUND TRUE)
+  # the following line skips cpplint (only works in a git repo)
+  # comment the line when this package is in a git repo and when
+  # a copyright and license is added to all source files
+  set(ament_cmake_cpplint_FOUND TRUE)
+  ament_lint_auto_find_test_dependencies()
+endif()
+
+install(DIRECTORY launch config
+  DESTINATION share/${PROJECT_NAME}
+)
+
+install(PROGRAMS
+  launch/decompressor.py
+  DESTINATION lib/${PROJECT_NAME}
+)
+
+ament_package()
+
+
+--------------------------------------------------
+FICHIER : src/platform_bringup/launch/openvins.launch.py
+--------------------------------------------------
+
+
+#===========================================
+#== CALLED BY system.launch.py===========
+#===========================================
+
+# Almost all is done in : config -> rs_custom -> estimator_config.yaml
+# decompression of the image topic of the OliveVision camera is made here
+#But if you want to pass with this camera you have to change the topic and parameter configuration in estimator_config.yaml and cam and embedded IMU
+# Like it's a monocular camera, it's possible that doesn't work
+
+
+
+import os
+from ament_index_python.packages import get_package_share_directory
+from launch import LaunchDescription
+from launch.actions import DeclareLaunchArgument
+from launch.substitutions import LaunchConfiguration
+from launch_ros.actions import Node
+
+def generate_launch_description():
+    pkg_bringup = get_package_share_directory('platform_bringup')
+    ov_config = os.path.join(pkg_bringup, 'config', 'rs_custom', 'estimator_config.yaml')
+
+    use_sim_time = LaunchConfiguration('use_sim_time')
+    declare_use_sim_time = DeclareLaunchArgument(
+        'use_sim_time',
+        default_value='false',
+        description='Use simulation (Gazebo/Rosbag) clock'
+    )
+
+    return LaunchDescription([
+        declare_use_sim_time,
+
+
+        Node(
+            package='platform_bringup',
+            executable='decompressor.py',
+            name='decompressor_node',
+            remappings=[
+                # Rename
+                ('/olivecam/image/compressed', '/olive/camera/olivecam/image/compressed')
+            ],
+            # decompression and publish on /olive/camera/image_raw (waited by OpenVINS)
+            parameters=[{'use_sim_time': use_sim_time}]
+        ),
+
+        Node(
+            package='ov_msckf',
+            executable='run_subscribe_msckf',
+            name='ov_msckf',
+            namespace='ov_msckf',
+            arguments=[ov_config], 
+            parameters=[{'use_sim_time': use_sim_time}],
+            output='screen'
+        ),
+
+    ])
+
+
+--------------------------------------------------
+FICHIER : src/platform_bringup/launch/record_dataset.launch.py
+--------------------------------------------------
+#!/usr/bin/env python3
+
+#=============================================================================
+# ============= OFTEN USED in a parallel terminal that system.launch==========
+#=============================================================================
+
+# GOAL : rosbag record conditional on /ov_msckf/odomimu initialization
+
+import os
+from datetime import datetime
+from launch import LaunchDescription
+from launch.actions import ExecuteProcess
+
+def generate_launch_description():
+
+    # Format de nommage sécurisé pour éviter les écrasements
+    bag_name = datetime.now().strftime('UKF1_%Y%m%d_%H%M%S')
+    
+    topics_to_record = [
+        '/tf',
+        '/tf_static',
+        '/robot_description',
+        '/RigidBody_004/pose', # To be adapted according to the exact OptiTrack name
+        
+        # --- sensors Olive + Holybro ---
+        #'/olivecam/image/compressed',
+        #'/imu/fused',
+        #'/olive/olixSense/x1/oliveimu/imu',
+        #'/olivecam/filtered_ahrs_synced',
+        '/optical_flow/velocity',
+        '/optical_flow/range',
+        
+        # --- estimations odom ---
+        '/odometry/filtered_ukf',
+        '/ov_msckf/odomimu'
+    ]
+    
+    # Conversion de la liste en chaîne de caractères
+    topics_str = " ".join(topics_to_record)
+
+    # 1. Attendre qu'UN SEUL message soit publié sur le topic cible (--once).
+    # 2. Une fois reçu, déclencher l'enregistrement.
+    conditional_command = (
+        "echo '[INFO] En attente de convergence... (En attente de /ov_msckf/odomimu)' && "
+        "ros2 topic echo --once /ov_msckf/odomimu > /dev/null && "
+        "echo '[INFO] Première pose reçue ! Démarrage de rosbag record...' && "
+        f"ros2 bag record --max-bag-size 2147483648 --compression-mode message --compression-format zstd -o {bag_name} {topics_str}"
+    )
+
+    return LaunchDescription([
+        ExecuteProcess(
+            cmd=['bash', '-c', conditional_command],
+            output='screen'
+        )
+    ])
+
+
+--------------------------------------------------
+FICHIER : src/platform_bringup/launch/decompressor.py
+--------------------------------------------------
+#!/usr/bin/env python3
+
+
+#===========================================
+#== CALLED BY openvins.launch.py===========
+#===========================================
+
+#========== Needed if camera OlixVision ===========
+#==== Don't need this if D435i================
+
+
+
+import rclpy
+from rclpy.node import Node
+from sensor_msgs.msg import CompressedImage, Image
+from cv_bridge import CvBridge
+from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy
+import numpy as np
+import cv2
+
+class DecompressorNode(Node):
+    def __init__(self):
+        super().__init__('decompressor_node')
+        self.bridge = CvBridge()
+        
+        qos_best_effort = QoSProfile(
+            reliability=ReliabilityPolicy.BEST_EFFORT,
+            history=HistoryPolicy.KEEP_LAST,
+            depth=10
+        )
+        
+        self.sub = self.create_subscription(
+            CompressedImage,
+            '/olive/camera/olivecam/image/compressed',
+            self.image_callback,
+            qos_best_effort
+        )
+        
+        self.pub = self.create_publisher(Image, '/olive/camera/image_raw', 10)
+        self.get_logger().info('Active heavy-duty decompressor (Numpy/OpenCV)...')
+
+    def image_callback(self, msg):
+        try:
+            # conversion in octets array
+            np_arr = np.frombuffer(msg.data, np.uint8)
+            
+            # Open CV decompressor (best)
+            cv_image = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
+            
+            # Verification ~"image is full"
+            if cv_image is None:
+                self.get_logger().warn('Corrupted frame ignored (Frame Drop).')
+                return
+
+            # Conversion to a standard ROS 2 message
+            raw_msg = self.bridge.cv2_to_imgmsg(cv_image, encoding='bgr8')
+            raw_msg.header = msg.header 
+            
+            self.pub.publish(raw_msg)
+            
+        except Exception as e:
+            self.get_logger().error(f'Fatal decompression error: {e}')
+
+def main(args=None):
+    rclpy.init(args=args)
+    node = DecompressorNode()
+    rclpy.spin(node)
+    node.destroy_node()
+    rclpy.shutdown()
+
+if __name__ == '__main__':
+    main()
+
+
+--------------------------------------------------
+FICHIER : src/platform_bringup/launch/system.launch.py
+--------------------------------------------------
+
+#===========================================
+#======= BASE FILE OF THE SYSTEM ===========
+#===========================================
+
+#launch topics of the IMU, Hflow, camera, sensorfusion, TF or the sensor platform
+
+
+
+
+import os
+from ament_index_python.packages import get_package_share_directory
+from launch import LaunchDescription
+from launch.actions import TimerAction, SetEnvironmentVariable, ExecuteProcess, IncludeLaunchDescription
+from launch.launch_description_sources import PythonLaunchDescriptionSource
+from launch_ros.actions import Node, ComposableNodeContainer, LoadComposableNodes
+from launch_ros.descriptions import ComposableNode
+import xacro
+
+def generate_launch_description():
+
+    SetEnvironmentVariable('ROS_DOMAIN_ID', '3')
+       
+    pkg_desc = get_package_share_directory('platform_description')
+    pkg_bringup = get_package_share_directory('platform_bringup')
+   
+    # tests : 
+    #pkg_networking = get_package_share_directory('olive_networking')
+    #ekf_config = os.path.join(pkg_bringup, 'config', 'ekf.yaml')
+    #inekf_config = os.path.join(pkg_bringup, 'config', 'inekf.yaml')
+    #fusion_config = os.path.join(pkg_bringup, 'config', 'fusioncore.yaml')
+    #realsense_config = os.path.join(pkg_bringup, 'config', 'realsense.yaml')
+
+    
+
+    # DroneCAN for Hflow
+    allocator_script_path = os.path.join(pkg_bringup, 'launch', 'can_allocator.py')
+    hflow_allocator = ExecuteProcess(
+        cmd=['python3', allocator_script_path],
+        output='screen'
+    )
+
+    # merging nodes into a single single-threaded container (zero-copy)
+    sensor_processing_container = ComposableNodeContainer(
+        name='sensor_processing_container',
+        namespace='',
+        package='rclcpp_components',
+        executable='component_container_mt', # use of single-threaded (more light)
+        composable_node_descriptions=[
+            # Componant 1 : Material bridge DroneCAN
+            ComposableNode(
+                package='uavcan_bridge',
+                plugin='uavcan_bridge::DronecanBridgeComponent',
+                name='hflow_can_bridge',
+                parameters=[{
+                    'can_interface': 'slcan0',
+                    'node_id': 127
+                }],
+                extra_arguments=[{'use_intra_process_comms': True}] # zero-copy active
+            ),
+            # Componant 2 : IMU
+            ComposableNode(
+                package='platform_processing',
+                plugin='platform_processing::ImuSyncComponent',
+                name='imu_sync_node',
+                extra_arguments=[{'use_intra_process_comms': True}] # zero-copy active
+            )
+        ],
+        output='screen'
+    )
+    
+    # Staggered loading of the RealSense to avoid USB crashes
+    load_realsense = LoadComposableNodes(
+        target_container='sensor_processing_container',
+        composable_node_descriptions=[
+            ComposableNode(
+                package='realsense2_camera',
+                plugin='realsense2_camera::RealSenseNodeFactory',
+                name='d435_node',
+                namespace='d435',
+                parameters=[{
+                    'camera_name': 'd435',
+                    'enable_gyro': True,
+                    'enable_accel': True,
+                    'unite_imu_method': 2,
+                    'gyro_fps': 200,
+                    'accel_fps': 250,
+                    'depth_module.emitter_enabled': 0,
+                    'enable_depth': False,
+                    'enable_color': False,
+                    'enable_infra1': True,
+                    'enable_infra2': True,
+                    'depth_module.profile': '848x480x30',
+                    'enable_sync': True,
+                    'initial_reset': True,
+                    'serial_no': '108322073329',
+                    'publish_tf': False,
+                    'global_time_enabled': False  # Disables UVC XU requests that cause the Jetson's USB bus to crash
+                }],
+                extra_arguments=[{'use_intra_process_comms': True}]
+            )
+        ]
+    )
+    delayed_realsense = TimerAction(period=5.0, actions=[load_realsense])
+
+
+    # Robot URDF Model (Single geometric source of truth – REP-105)
+    xacro_file = os.path.join(pkg_desc, 'urdf', 'sensor_platform.urdf.xacro')
+    robot_description_raw = xacro.process_file(xacro_file).toxml()
+    rsp_node = Node(
+        package='robot_state_publisher',
+        executable='robot_state_publisher',
+        name='robot_state_publisher',
+        output='screen',
+        parameters=[{'robot_description': robot_description_raw}]
+    )      
+    
+    # VRPN Client (= ground truth given by the motion capture software Motive)
+    vrpn_node = Node(
+        package='vrpn_mocap',
+        executable='client_node',
+        name='vrpn_client',
+        parameters=[{
+            'server': '192.168.42.128', 
+            'port': 3883,
+            'update_freq': 100.0,     
+            'frame_id': 'map',        
+            'use_sim_time': False,
+        }],
+        output='screen'
+    )
+    
+    
+    
+    # UKF launch
+    ukf_launch = TimerAction(
+        period=15.0, # period shift to be secure
+        actions=[
+            IncludeLaunchDescription(
+                PythonLaunchDescriptionSource(
+                   os.path.join(pkg_bringup, 'launch', 'ukf_fusion.launch.py')
+                ),
+                launch_arguments={'use_sim_time': 'false'}.items()
+            )
+        ]
+    )
+    
+
+
+    # OpenVins launch 
+    delayed_openvins = TimerAction(
+        period=7.0, # Allow 7 seconds to ensure the CAN bridge, ImuSync, and camera are already publishing
+        actions=[
+            IncludeLaunchDescription(
+                PythonLaunchDescriptionSource(
+                    os.path.join(pkg_bringup, 'launch', 'openvins.launch.py')
+                ),
+                launch_arguments={'use_sim_time': 'false'}.items()
+            )
+        ]
+    )
+    
+    
+    
+    
+    return LaunchDescription([
+        hflow_allocator,
+        rsp_node,
+        sensor_processing_container,
+        delayed_realsense,
+        vrpn_node,
+        ukf_launch,
+        delayed_openvins
+    ])
+
+
+--------------------------------------------------
+FICHIER : src/platform_bringup/launch/custom_vslam.launch.py
+--------------------------------------------------
+
+
+
+#====================================
+#========= CALLED BY NOBODY===========
+#==================================
+
+
+#==========test for later (with isaac ros)==========
+
+
+
+
+
+import os
+import xacro
+from ament_index_python.packages import get_package_share_directory
+from launch import LaunchDescription
+from launch_ros.actions import Node, ComposableNodeContainer
+from launch_ros.descriptions import ComposableNode
+
+def generate_launch_description():
+    urdf_path = os.path.join(
+        get_package_share_directory('platform_description'),
+        'urdf',
+        'sensor_platform.urdf.xacro'
+    )
+    robot_description_config = xacro.process_file(urdf_path).toxml()
+
+    # 2. Robot State Publisher node
+    rsp_node = Node(
+        package='robot_state_publisher',
+        executable='robot_state_publisher',
+        name='robot_state_publisher',
+        output='screen',
+        parameters=[{
+            'robot_description': robot_description_config,
+            'use_sim_time': True # if rosbag
+        }]
+    )
+
+    # 3. node Isaac ROS VSLAM 
+    vslam_node = ComposableNode(
+        name='visual_slam_node',
+        package='isaac_ros_visual_slam',
+        plugin='nvidia::isaac_ros::visual_slam::VisualSlamNode',
+        parameters=[{
+            'use_sim_time': True, 
+            'enable_image_denoising': False,
+            'rectified_images': True,
+            'enable_imu_fusion': True,
+            # VÉRIFICATION CRITIQUE : Ces frames doivent exister dans ton URDF
+            'base_frame': 'base_link',
+            'odom_frame': 'odom',
+            'map_frame': 'map',
+            'camera_optical_frame': 'olivecam_optical_frame', # depending URDF
+            'imu_frame': 'imu_link'                           # depending URDF
+        }],
+        remappings=[
+            ('visual_slam/image_0', '/olive/camera/image_raw'),
+            ('visual_slam/camera_info_0', '/olivecam/camera_info_synced'),
+            ('visual_slam/imu', '/imu/fused')
+        ]
+    )
+
+    vslam_container = ComposableNodeContainer(
+        name='visual_slam_container',
+        namespace='',
+        package='rclcpp_components',
+        executable='component_container',
+        composable_node_descriptions=[vslam_node],
+        output='screen'
+    )
+
+    return LaunchDescription([
+        rsp_node,
+        vslam_container
+    ])
+
+
+--------------------------------------------------
+FICHIER : src/platform_bringup/launch/test_hflow.launch.py
+--------------------------------------------------
+
+#===========================================
+#==============CALLED BY NOBODY===========
+#===========================================
+
+
+# OLD file for test the H flow
+# Don't needed and can be deleted if need
+
+
+
+import os
+from launch import LaunchDescription
+from launch.actions import SetEnvironmentVariable
+from launch_ros.actions import Node
+
+def generate_launch_description():
+    
+    set_domain_id = SetEnvironmentVariable('ROS_DOMAIN_ID', '3')
+
+    uavcan_node = Node(
+        package='uavcan_bridge',
+        executable='dronecan_bridge_node', 
+        name='hflow_can_bridge',
+        parameters=[{
+            'can_interface': 'slcan0',
+            'node_id': 127
+        }],
+        output='screen'
+    )
+
+    return LaunchDescription([
+        uavcan_node
+    ])
+
+
+--------------------------------------------------
+FICHIER : src/platform_bringup/launch/can_allocator.py
+--------------------------------------------------
+#!/usr/bin/env python3
+
+
+#====================================
+#== CALLED BY SYSTEM.LAUNCH===========
+#==================================
+
+
+
+import rclpy
+from rclpy.node import Node
+import dronecan
+
+class DronecanAllocator(Node):
+    def __init__(self):
+        super().__init__('dronecan_allocator')
+        try:
+            # Jetson take the ID 127 (in the can)
+            self.node = dronecan.make_node('slcan0', node_id=127, bitrate=1000000)
+            # critic : initialised the "NodeMonitor"
+            self.node_monitor = dronecan.app.node_monitor.NodeMonitor(self.node)
+            # launch
+            self.allocator = dronecan.app.dynamic_node_id.CentralizedServer(self.node, self.node_monitor)
+            
+            self.timer = self.create_timer(0.01, lambda: self.node.spin(timeout=0.005))
+            self.get_logger().info("DroneCAN allocation server active on slcan0")
+        except Exception as e:
+            self.get_logger().error(f"Errorr CAN: {e}")
+
+def main(args=None):
+    rclpy.init(args=args)
+    rclpy.spin(DronecanAllocator())
+    rclpy.shutdown()
+
+if __name__ == '__main__':
+    main()
+
+
+--------------------------------------------------
+FICHIER : src/platform_bringup/launch/ukf_fusion.launch.py
+--------------------------------------------------
+
+#===========================================
+#== CALLED BY system.launch.py===========
+#===========================================
+
+# file for launch the UKF cleanly
+
+
+
+import os
+from ament_index_python.packages import get_package_share_directory
+from launch import LaunchDescription
+from launch.actions import DeclareLaunchArgument
+from launch.substitutions import LaunchConfiguration
+from launch_ros.actions import Node
+
+def generate_launch_description():
+    pkg_bringup = get_package_share_directory('platform_bringup')
+    ukf_config_path = os.path.join(pkg_bringup, 'config', 'ukf.yaml')
+
+    # Argument to synchronize the clock with a rosbag (use_sim_time) if need
+    use_sim_time = LaunchConfiguration('use_sim_time')
+    declare_use_sim_time = DeclareLaunchArgument(
+        'use_sim_time',
+        default_value='false',
+        description='Use simulation (Gazebo/Rosbag) clock'
+    )
+
+
+    ukf_node = Node(
+        package='robot_localization',
+        executable='ukf_node',
+        name='ukf_filter_node',
+        output='screen',
+        parameters=[
+            ukf_config_path, 
+            {'use_sim_time': use_sim_time} 
+        ],
+        remappings=[ #added just for debugg due to an issue
+            ('odometry/filtered', 'odometry/filtered_ukf'),
+            ('accel/filtered', 'accel/filtered_ukf')
+        ]
+    )
+
+
+
+    return LaunchDescription([
+        declare_use_sim_time,
+        ukf_node
+    ])
+
+
+--------------------------------------------------
+FICHIER : src/platform_bringup/config/rs_custom/kalibr_imu_chain.yaml
+--------------------------------------------------
+%YAML:1.0
+
+imu0:
+  T_i_b:
+      - [1.0, 0.0, 0.0, 0.0]
+      - [0.0, 1.0, 0.0, 0.0]
+      - [0.0, 0.0, 1.0, 0.0]
+      - [0.0, 0.0, 0.0, 1.0]
+  # Values from allan plots of ~20hour dataset
+  # Inflated values (to account for unmodelled effects)
+  #  - white noise multiplied by 5
+  #  - bias random walk multiplied by 10
+  #accelerometer_noise_density: 0.013307796
+  #accelerometer_random_walk: 0.00291178331237873
+  #gyroscope_noise_density: 0.00019789082
+  #gyroscope_random_walk: 2.7958932684593065e-06
+  
+  
+  #Test
+  accelerometer_noise_density: 0.01373676763
+  accelerometer_random_walk: 0.0005624771742904598
+  gyroscope_noise_density: 0.00097604109
+  gyroscope_random_walk: 1.4185449668488343e-05
+  
+  model: kalibr
+  rostopic: /d435/d435_node/imu
+  time_offset: 0.0
+  update_rate: 200
+  # three different modes supported:
+  # "calibrated" (same as "kalibr"), "kalibr", "rpng"
+  #model: "kalibr"
+  # how to get from Kalibr imu.yaml result file:
+  #   - Tw is imu0:gyroscopes:M:
+  #   - R_IMUtoGYRO: is imu0:gyroscopes:C_gyro_i:
+  #   - Ta is imu0:accelerometers:M:
+  #   - R_IMUtoACC not used by Kalibr
+  #   - Tg is imu0:gyroscopes:A:
+  Tw:
+      - [0.9964464280063343, 0.0, 0.0]
+      - [0.0011406112651474746, 0.9895147732255839, 0.0]
+      - [-0.0013848189754408987, 0.0019274076291287833, 1.0007227798082419]
+
+  R_IMUtoGYRO:
+      - [0.9999858742891563, 0.004687298741214516, -0.002506083131776854]
+      - [-0.004682900889523271, 0.9999874900914467, 0.001757867989551664]
+      - [0.002514291433320694, -0.001746107419489724, 0.9999953147127585]
+
+  Ta:
+      - [1.0004856977795848, 0.0, 0.0]
+      - [-0.053873237900176195, 1.0022390500969576, 0.0]
+      - [-1.7251242893150113e-05, 0.0037121795806156445, 0.9996892830190011]
+ 
+  R_IMUtoACC:
+      - [1.0, 0.0, 0.0]
+      - [0.0, 1.0, 0.0]
+      - [0.0, 0.0, 1.0]
+
+  Tg:
+      - [0.00019587123800969493, -0.0005248999077666065, 0.00034150405352878613]
+      - [0.0005704556547982573, 0.0005293114693169516, 0.00012377436133702172]
+      - [-0.00038320347618273846, -0.001393387002133468, 0.0001153056777554264]
+     
+      
+      
+      
+      
+      
+      
+      
+
+
+
+
+--------------------------------------------------
+FICHIER : src/platform_bringup/config/rs_custom/kalibr_imucam_chain.yaml
+--------------------------------------------------
+%YAML:1.0
+
+cam0:
+  T_cam_imu:
+    - [0.9999973486605792, 0.0022572792896272246, 0.0004553702013144954, 0.005519625719169473]
+    - [-0.002256557409753317, 0.9999962064101122, -0.001579592998312745, -0.006750939126906444]
+    - [-0.0004589340563878361, 0.001578561241273603, 0.9999986487610566, -0.023700463197732717]
+    - [0.0, 0.0, 0.0, 1.0]
+  cam_overlaps: [1]
+  camera_model: pinhole
+  distortion_coeffs: [-0.007659222164196881, -0.0005023682466075009, 0.0010448958953810197, -0.0004827913440815677]
+  distortion_model: radtan
+  intrinsics: [413.5111469032598, 414.20795715939494, 423.521867960405, 239.42372024086853]
+  resolution: [848, 480]
+  rostopic: /d435/d435_node/infra1/image_rect_raw
+  timeshift_cam_imu: 0.003624639241073109
+cam1:
+  T_cam_imu:
+    - [0.9999968252508827, 0.0021624573269213125, -0.0012935480139979233, -0.044630808638198086]
+    - [-0.002164051179267606, 0.9999968994905404, -0.0012320275156974027, -0.006732841054317128]
+    - [0.0012908797964117811, 0.0012348229084242662, 0.999998404419595, -0.023638652374227884]
+    - [0.0, 0.0, 0.0, 1.0]
+  T_cn_cnm1:
+    - [0.9999984661467949, -9.20578429187153e-05, -0.001749065294170625, -0.0501925010256006]
+    - [9.266582066017966e-05, 0.9999999353201723, 0.00034752365278162875, 2.582262683585078e-05]
+    - [0.0017490331887635518, -0.00034768519830223404, 0.9999984099976859, 4.977192953214719e-05]
+    - [0.0, 0.0, 0.0, 1.0]
+  cam_overlaps: [0]
+  camera_model: pinhole
+  distortion_coeffs: [-0.007257102060135205, -0.0008461974580259748, 0.0011936590138093637, -6.837457881429248e-05]
+  distortion_model: radtan
+  intrinsics: [413.60804959761293, 414.3306050760599, 424.3561477013585, 239.32237311647756]
+  resolution: [848, 480]
+  rostopic: /d435/d435_node/infra2/image_rect_raw
+  timeshift_cam_imu: 0.003623994468905067
+
+
+
+
+
+
+
+
+
+--------------------------------------------------
+FICHIER : src/platform_bringup/config/rs_custom/estimator_config.yaml
+--------------------------------------------------
+%YAML:1.0 # need to specify the file type at the top!
+
+verbosity: "INFO" #"INFO"        # ALL, DEBUG, INFO, WARNING, ERROR, SILENT
+
+use_fej: true # if first-estimate Jacobians should be used (enable for good consistency)
+integration: "rk4" # discrete, rk4, analytical (if rk4 or analytical used then analytical covariance propagation is used)
+use_stereo: true # if we have more than 1 camera, if we should try to track stereo constraints between pairs
+max_cameras: 2 # how many cameras we have 1 = mono, 2 = stereo, >2 = binocular (all mono tracking)
+
+calib_cam_extrinsics: true # if the transform between camera and IMU should be optimized R_ItoC, p_CinI
+calib_cam_intrinsics: true # if camera intrinsics should be optimized (focal, center, distortion)
+calib_cam_timeoffset: true # if timeoffset between camera and IMU should be optimized
+calib_imu_intrinsics: false         # if imu intrinsics should be calibrated (rotation and skew-scale matrix)
+calib_imu_g_sensitivity: true # if gyroscope gravity sensitivity (Tg) should be calibrated
+
+max_clones: 11 # how many clones in the sliding window
+max_slam: 50 # number of features in our state vector
+max_slam_in_update: 25 # update can be split into sequential updates of batches, how many in a batch
+max_msckf_in_update: 40 # how many MSCKF features to use in the update
+dt_slam_delay: 1 # delay before initializing (helps with stability from bad initialization...)
+
+gravity_mag: 9.81  #9.293 #9.81           # magnitude of gravity in this location
+
+feat_rep_msckf: "GLOBAL_3D"
+feat_rep_slam: "ANCHORED_MSCKF_INVERSE_DEPTH"
+feat_rep_aruco: "ANCHORED_MSCKF_INVERSE_DEPTH"
+
+# zero velocity update parameters we can use
+# we support either IMU-based or disparity detection.
+try_zupt: true # false=default
+zupt_chi2_multipler: 1 # set to 0 for only disp-based =default
+zupt_max_velocity: 0.1
+zupt_noise_multiplier: 10
+zupt_max_disparity: 0.5 # set to 0 for only imu-based
+zupt_only_at_beginning: false
+
+# ==================================================================
+# ==================================================================
+
+init_window_time: 2.0 # how many seconds to collect initialization information
+init_imu_thresh: 1.5 # threshold for variance of the accelerometer to detect a "jerk" in motion
+init_max_disparity: 10.0 # max disparity to consider the platform stationary (dependent on resolution)
+init_max_features: 50 # how many features to track during initialization (saves on computation)
+
+init_dyn_use: true #false       # if dynamic initialization should be used
+init_dyn_mle_opt_calib: false # if we should optimize calibration during intialization (not recommended)
+init_dyn_mle_max_iter: 50 # how many iterations the MLE refinement should use (zero to skip the MLE)
+init_dyn_mle_max_time: 0.05 # how many seconds the MLE should be completed in
+init_dyn_mle_max_threads: 6 # how many threads the MLE should use
+init_dyn_num_pose: 6 # number of poses to use within our window time (evenly spaced)
+init_dyn_min_deg: 10.0 # orientation change needed to try to init
+
+init_dyn_inflation_ori: 10 # what to inflate the recovered q_GtoI covariance by
+init_dyn_inflation_vel: 100 # what to inflate the recovered v_IinG covariance by
+init_dyn_inflation_bg: 10 # what to inflate the recovered bias_g covariance by
+init_dyn_inflation_ba: 100 # what to inflate the recovered bias_a covariance by
+init_dyn_min_rec_cond: 1e-12 # reciprocal condition number thresh for info inversion
+
+init_dyn_bias_g: [ 0.0, 0.0, 0.0 ] # initial gyroscope bias guess
+init_dyn_bias_a: [ 0.0, 0.0, 0.0 ] # initial accelerometer bias guess
+
+# ==================================================================
+# ==================================================================
+
+record_timing_information: false # if we want to record timing information of the method
+record_timing_filepath: "/tmp/traj_timing.txt" # https://docs.openvins.com/eval-timing.html#eval-ov-timing-flame
+
+# if we want to save the simulation state and its diagional covariance
+# use this with rosrun ov_eval error_simulation
+save_total_state: false
+filepath_est: "/tmp/ov_estimate.txt"
+filepath_std: "/tmp/ov_estimate_std.txt"
+filepath_gt: "/tmp/ov_groundtruth.txt"
+
+# ==================================================================
+# ==================================================================
+
+# our front-end feature tracking parameters
+# we have a KLT and descriptor based (KLT is better implemented...)
+use_klt: true # if true we will use KLT, otherwise use a ORB descriptor + robust matching
+num_pts: 200 # number of points (per camera) we will extract and try to track
+fast_threshold: 30 # threshold for fast extraction (warning: lower threshs can be expensive)
+grid_x: 5 # extraction sub-grid count for horizontal direction (uniform tracking)
+grid_y: 5 # extraction sub-grid count for vertical direction (uniform tracking)
+min_px_dist: 15 # distance between features (features near each other provide less information)
+knn_ratio: 0.70 # descriptor knn threshold for the top two descriptor matches
+track_frequency: 31.0 # frequency we will perform feature tracking at (in frames per second / hertz)
+downsample_cameras: false # will downsample image in half if true
+num_opencv_threads: 4 # -1: auto, 0-1: serial, >1: number of threads
+histogram_method: "HISTOGRAM" # NONE, HISTOGRAM, CLAHE
+
+# aruco tag tracker for the system
+# DICT_6X6_1000 from https://chev.me/arucogen/
+use_aruco: false
+num_aruco: 1024
+downsize_aruco: true
+
+# ==================================================================
+# ==================================================================
+
+# camera noises and chi-squared threshold multipliers
+up_msckf_sigma_px: 1
+up_msckf_chi2_multipler: 1
+up_slam_sigma_px: 1
+up_slam_chi2_multipler: 1
+up_aruco_sigma_px: 1
+up_aruco_chi2_multipler: 1
+
+# masks for our images
+use_mask: false 
+mask0: "mask_t265_cam0.png" #relative to current file
+mask1: "mask_t265_cam1.png" #relative to current file
+
+# imu and camera spacial-temporal
+# imu config should also have the correct noise values
+relative_config_imu: "kalibr_imu_chain.yaml"
+relative_config_imucam: "kalibr_imucam_chain.yaml"
+
+
+--------------------------------------------------
+FICHIER : src/platform_bringup/config/isaac_vslam.yaml
+--------------------------------------------------
+visual_slam_node:
+  ros__parameters:
+    use_sim_time: true
+    enable_image_denoising: false
+    rectified_images: false # 'true' if image rectified by image_proc
+    enable_slam: true
+    enable_imu_fusion: true
+    
+    # Configuration Monocular + IMU
+    camera_optical_frames: ["olivecam_optical_frame"]
+    imu_frame: "imu_link"
+    base_frame: "base_link"
+    odom_frame: "odom_vslam" 
+    map_frame: "map_vslam"
+    
+    # Desactivate the TF global publication if you compare this to UKF
+    publish_odom_to_base_tf: false
+    publish_map_to_odom_tf: false
+
+#============================FOR LATER=================================
+
+
+--------------------------------------------------
+FICHIER : src/platform_bringup/config/ukf.yaml
+--------------------------------------------------
+### ukf config file ###
+ukf_filter_node:
+    ros__parameters:
+       
+        # The frequency, in Hz, at which the filter will output a position estimate. Note that the filter will not begin
+        # computation until it receives at least one message from one of the inputs. It will then run continuously at the
+        # frequency specified here, regardless of whether it receives more measurements. Defaults to 30 if unspecified.
+        frequency: 20.0
+
+        # The period, in seconds, after which we consider a sensor to have timed out. In this event, we carry out a predict
+        # cycle on the EKF without correcting it. This parameter can be thought of as the minimum frequency with which the
+        # filter will generate new output. Defaults to 1 / frequency if not specified.
+        sensor_timeout: 0.1
+
+        # ekf_localization_node and ukf_localization_node both use a 3D omnidirectional motion model. If this parameter is
+        # set to true, no 3D information will be used in your state estimate. Use this if you are operating in a planar
+        # environment and want to ignore the effect of small variations in the ground plane that might otherwise be detected
+        # by, for example, an IMU. Defaults to false if unspecified.
+        two_d_mode: false
+
+        # Use this parameter to provide an offset to the transform generated by ekf_localization_node. This can be used for
+        # future dating the transform, which is required for interaction with some other packages. Defaults to 0.0 if
+        # unspecified.
+        transform_time_offset: 0.0
+
+        # Use this parameter to provide specify how long the tf listener should wait for a transform to become available. 
+        # Defaults to 0.0 if unspecified.
+        transform_timeout: 0.1
+
+        # If you're having trouble, try setting this to true, and then echo the /diagnostics_agg topic to see if the node is
+        # unhappy with any settings or data.
+        print_diagnostics: true
+
+        # Debug settings. Not for the faint of heart. Outputs a ludicrous amount of information to the file specified by
+        # debug_out_file. I hope you like matrices! Please note that setting this to true will have strongly deleterious
+        # effects on the performance of the node. Defaults to false if unspecified.
+        debug: false
+
+        # Defaults to "robot_localization_debug.txt" if unspecified. Please specify the full path.
+        debug_out_file: robot_localization_debug.txt
+
+        # Whether we'll allow old measurements to cause a re-publication of the updated state
+        permit_corrected_publication: false
+
+        # Whether to publish the acceleration state. Defaults to false if unspecified.
+        publish_acceleration: false
+
+        # Whether to broadcast the transformation over the /tf topic. Defaults to true if unspecified.
+        publish_tf: true
+
+        # REP-105 (http://www.ros.org/reps/rep-0105.html) specifies four principal coordinate frames: base_link, odom, map, and
+        # earth. base_link is the coordinate frame that is affixed to the robot. Both odom and map are world-fixed frames.
+        # The robot's position in the odom frame will drift over time, but is accurate in the short term and should be
+        # continuous. The odom frame is therefore the best frame for executing local motion plans. The map frame, like the odom
+        # frame, is a world-fixed coordinate frame, and while it contains the most globally accurate position estimate for your
+        # robot, it is subject to discrete jumps, e.g., due to the fusion of GPS data or a correction from a map-based
+        # localization node. The earth frame is used to relate multiple map frames by giving them a common reference frame.
+        # ekf_localization_node and ukf_localization_node are not concerned with the earth frame.
+        # Here is how to use the following settings:
+        # 1. Set the map_frame, odom_frame, and base_link frames to the appropriate frame names for your system.
+        #     1a. If your system does not have a map_frame, just remove it, and make sure "world_frame" is set to the value of
+        #         odom_frame.
+        # 2. If you are fusing continuous position data such as wheel encoder odometry, visual odometry, or IMU data, set
+        #   "world_frame" to your odom_frame value. This is the default behavior for robot_localization's state estimation nodes.
+        # 3. If you are fusing global absolute position data that is subject to discrete jumps (e.g., GPS or position updates
+        # from landmark observations) then:
+        #     3a. Set your "world_frame" to your map_frame value
+        #     3b. MAKE SURE something else is generating the odom->base_link transform. Note that this can even be another state
+        #         estimation node from robot_localization! However, that instance should *not* fuse the global data.
+        map_frame: map              # Defaults to "map" if unspecified
+        odom_frame: odom            # Defaults to "odom" if unspecified
+        base_link_frame: base_link  # Defaults to "base_link" if unspecified
+        world_frame: odom           # Defaults to the value of odom_frame if unspecified
+
+        # The filter accepts an arbitrary number of inputs from each input message type (nav_msgs/Odometry,
+        # geometry_msgs/PoseWithCovarianceStamped, geometry_msgs/TwistWithCovarianceStamped,
+        # sensor_msgs/Imu). To add an input, simply append the next number in the sequence to its "base" name, e.g., odom0,
+        # odom1, twist0, twist1, imu0, imu1, imu2, etc. The value should be the topic name. These parameters obviously have no
+        # default values, and must be specified.
+        odom0: /ov_msckf/odomimu
+
+        # Each sensor reading updates some or all of the filter's state. These options give you greater control over which
+        # values from each measurement are fed to the filter. For example, if you have an odometry message as input, but only
+        # want to use its Z position value, then set the entire vector to false, except for the third entry. The order of the
+        # values is x, y, z, roll, pitch, yaw, vx, vy, vz, vroll, vpitch, vyaw, ax, ay, az. Note that not some message types
+        # do not provide some of the state variables estimated by the filter. For example, a TwistWithCovarianceStamped message
+        # has no pose information, so the first six values would be meaningless in that case. Each vector defaults to all false
+        # if unspecified, effectively making this parameter required for each sensor.
+        odom0_config: [true, true, true,
+                       true, true, true,
+                       false, false, false,
+                       false, false, false,
+                       false, false, false]
+
+        # If you have high-frequency data or are running with a low frequency parameter value, then you may want to increase
+        # the size of the subscription queue so that more measurements are fused.
+        odom0_queue_size: 20
+
+        # [ADVANCED] When measuring one pose variable with two sensors, a situation can arise in which both sensors under-
+        # report their covariances. This can lead to the filter rapidly jumping back and forth between each measurement as they
+        # arrive. In these cases, it often makes sense to (a) correct the measurement covariances, or (b) if velocity is also
+        # measured by one of the sensors, let one sensor measure pose, and the other velocity. However, doing (a) or (b) isn't
+        # always feasible, and so we expose the differential parameter. When differential mode is enabled, all absolute pose
+        # data is converted to velocity data by differentiating the absolute pose measurements. These velocities are then
+        # integrated as usual. NOTE: this only applies to sensors that provide pose measurements; setting differential to true
+        # for twist measurements has no effect.
+        odom0_differential: false
+
+        # [ADVANCED] When the node starts, if this parameter is true, then the first measurement is treated as a "zero point"
+        # for all future measurements. While you can achieve the same effect with the differential paremeter, the key
+        # difference is that the relative parameter doesn't cause the measurement to be converted to a velocity before
+        # integrating it. If you simply want your measurements to start at 0 for a given sensor, set this to true.
+        odom0_relative: false
+        
+        # [ADVANCED] Whether to use the starting pose of child_frame_id as the origin of odometry.
+        # Note: this is different from setting odom0_relative to true, as when child_frame is different from 
+        # base_link_frame, the rotation of base_link will be coupled into the translation of child_frame.
+        # Set to true for fusing secondary odometry sources that are rigidly connected to base_link but has a non-zero 
+        # offset from base_link.
+        odom0_pose_use_child_frame: true  #false par default 
+
+        # [ADVANCED] If your data is subject to outliers, use these threshold settings, expressed as Mahalanobis distances, to
+        # control how far away from the current vehicle state a sensor measurement is permitted to be. Each defaults to
+        # numeric_limits<double>::max() if unspecified. It is strongly recommended that these parameters be removed if not
+        # required. Data is specified at the level of pose and twist variables, rather than for each variable in isolation.
+        # For messages that have both pose and twist data, the parameter specifies to which part of the message we are applying
+        # the thresholds.
+        odom0_pose_rejection_threshold: 50.0
+        odom0_twist_rejection_threshold: 3.0
+        
+
+        # Further input parameter examples
+        #odom1: example/another_odom
+        #odom1_config: [false, false, true,
+        #               false, false, false,
+        #               false, false, false,
+        #               false, false, true,
+        #               false, false, false]
+        #odom1_differential: false
+        #odom1_relative: true
+        #odom1_queue_size: 2
+        #odom1_pose_rejection_threshold: 2.0
+        #odom1_twist_rejection_threshold: 0.2
+        
+        pose0: /optical_flow/range
+        pose0_config: [false, false, true,
+                       false, false, false,
+                       false, false, false,
+                       false, false, false,
+                       false, false, false]
+        pose0_differential: false # True = Converts absolute Z into Vz velocity to avoid divergence; false = select pose rather than velocity.
+        pose0_relative: false #true
+        pose0_queue_size: 20
+        pose0_rejection_threshold: 10.0  # Note the difference in parameter name
+
+        twist0: /optical_flow/velocity
+        twist0_config: [false, false, false,
+                        false, false, false,
+                        true,  true,  false,
+                        false, false, false,
+                        false, false, false]
+        twist0_queue_size: 20
+        twist0_rejection_threshold: 5.0
+
+        imu0: /imu/fused
+        imu0_config: [false, false, false,
+                      true,  true,  false, #let yaw en false, so openvins can decide of the direction with his camera
+                      false, false, false, #IMU don't have them, Warning: sensor_msgs/Imu contains no information about linear velocities
+                      true,  true,  true,
+                      true,  true,  true]
+        imu0_differential: false #because if not, Warning : Both imu0_differential and imu0_relative were set to true. Using differential mode
+        imu0_relative: true   #Align the starting reference frame with the OpenVINS one.
+        imu0_queue_size: 20
+        imu0_pose_rejection_threshold: 0.4                 
+        imu0_twist_rejection_threshold: 1.0                #
+        imu0_linear_acceleration_rejection_threshold: 0.4  #
+
+        # [ADVANCED] Some IMUs automatically remove acceleration due to gravity, and others don't. If yours doesn't, please set
+        # this to true, and *make sure* your data conforms to REP-103, specifically, that the data is in ENU frame.
+        #imu0_remove_gravitational_acceleration: true
+
+        # [ADVANCED]  The EKF and UKF models follow a standard predict/correct cycle. During prediction, if there is no
+        # acceleration reference, the velocity at time t+1 is simply predicted to be the same as the velocity at time t. During
+        # correction, this predicted value is fused with the measured value to produce the new velocity estimate. This can be
+        # problematic, as the final velocity will effectively be a weighted average of the old velocity and the new one. When
+        # this velocity is the integrated into a new pose, the result can be sluggish covergence. This effect is especially
+        # noticeable with LIDAR data during rotations. To get around it, users can try inflating the process_noise_covariance
+        # for the velocity variable in question, or decrease the  variance of the variable in question in the measurement
+        # itself. In addition, users can also take advantage of the control command being issued to the robot at the time we
+        # make the prediction. If control is used, it will get converted into an acceleration term, which will be used during
+        # predicition. Note that if an acceleration measurement for the variable in question is available from one of the
+        # inputs, the control term will be ignored.
+        # Whether or not we use the control input during predicition. Defaults to false.
+        use_control: false    #true    no input command here
+
+        # Whether the input (assumed to be cmd_vel) is a geometry_msgs/Twist or geometry_msgs/TwistStamped message. Defaults to
+        # false.
+        stamped_control: true 
+
+        # The last issued control command will be used in prediction for this period. Defaults to 0.2.
+        control_timeout: 0.2
+
+        # Which velocities are being controlled. Order is vx, vy, vz, vroll, vpitch, vyaw.
+        control_config: [true, false, false, false, false, true]
+
+        # Places limits on how large the acceleration term will be. Should match your robot's kinematics.
+        acceleration_limits: [1.3, 0.0, 0.0, 0.0, 0.0, 3.4]
+
+        # Acceleration and deceleration limits are not always the same for robots.
+        deceleration_limits: [1.3, 0.0, 0.0, 0.0, 0.0, 4.5]
+
+        # If your robot cannot instantaneously reach its acceleration limit, the permitted change can be controlled with these
+        # gains
+        acceleration_gains: [0.8, 0.0, 0.0, 0.0, 0.0, 0.9]
+
+        # If your robot cannot instantaneously reach its deceleration limit, the permitted change can be controlled with these
+        # gains
+        deceleration_gains: [1.0, 0.0, 0.0, 0.0, 0.0, 1.0]
+
+        # [ADVANCED] The process noise covariance matrix can be difficult to tune, and can vary for each application, so it is
+        # exposed as a configuration parameter. This matrix represents the noise we add to the total error after each
+        # prediction step. The better the omnidirectional motion model matches your system, the smaller these values can be.
+        # However, if users find that a given variable is slow to converge, one approach is to increase the
+        # process_noise_covariance diagonal value for the variable in question, which will cause the filter's predicted error
+        # to be larger, which will cause the filter to trust the incoming measurement more during correction. The values are
+        # ordered as x, y, z, roll, pitch, yaw, vx, vy, vz, vroll, vpitch, vyaw, ax, ay, az. Defaults to the matrix below if
+        # unspecified.
+        # Note: the specification of covariance matrices can be cumbersome, so all matrix parameters in this package support
+        # both full specification or specification of only the diagonal values.
+        #process_noise_covariance: [0.05, 0.0,    0.0,    0.0,    0.0,    0.0,    0.0,     0.0,     0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,
+        #                           0.0,    0.05, 0.0,    0.0,    0.0,    0.0,    0.0,     0.0,     0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,
+        #                           0.0,    0.0,    0.06, 0.0,    0.0,    0.0,    0.0,     0.0,     0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,
+        #                           0.0,    0.0,    0.0,    0.03, 0.0,    0.0,    0.0,     0.0,     0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,
+        #                           0.0,    0.0,    0.0,    0.0,    0.03, 0.0,    0.0,     0.0,     0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,
+        #                           0.0,    0.0,    0.0,    0.0,    0.0,    0.06, 0.0,     0.0,     0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,
+        #                           0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.025, 0.0,     0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,
+        #                           0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,     0.025, 0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,
+        #                           0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,     0.0,     0.04, 0.0,    0.0,    0.0,    0.0,    0.0,    0.0,
+        #                           0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,     0.0,     0.0,    0.01, 0.0,    0.0,    0.0,    0.0,    0.0,
+        #                           0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,     0.0,     0.0,    0.0,    0.01, 0.0,    0.0,    0.0,    0.0,
+        #                           0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,     0.0,     0.0,    0.0,    0.0,    0.02, 0.0,    0.0,    0.0,
+        #                           0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,     0.0,     0.0,    0.0,    0.0,    0.0,    0.01, 0.0,    0.0,
+        #                           0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,     0.0,     0.0,    0.0,    0.0,    0.0,    0.0,    0.01, 0.0,
+        #                           0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,     0.0,     0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.015]
+        
+        # x, y, z, roll, pitch, yaw, vx, vy, vz, vroll, vpitch, vyaw, ax, ay, az
+        #process_noise_covariance: [0.0001, 0.0001, 0.0001,   # x, y, z quasi figés sans odom0/pose0
+        #                    0.03,   0.03,   0.06,     # roll, pitch, yaw (mesurés par imu0)
+        #                    0.0001, 0.0001, 0.0001,   # vx, vy, vz quasi figés
+        #                    0.01,   0.01,   0.02,     # vroll, vpitch, vyaw (mesurés)
+         #                   0.0001, 0.0001, 0.0001]   # ax, ay, az quasi figés
+         
+         
+         
+         
+         
+        # Matrice 15x15 complète (X, Y, Z, Roll, Pitch, Yaw, Vx, Vy, Vz, Vroll, Vpitch, Vyaw, Ax, Ay, Az)
+        process_noise_covariance: [
+          0.009,  0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,
+          0.0,    0.009,  0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,
+          0.0,    0.0,    0.03,   0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,
+          0.0,    0.0,    0.0,    0.03,   0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,
+          0.0,    0.0,    0.0,    0.0,    0.03,   0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,
+          0.0,    0.0,    0.0,    0.0,    0.0,    0.06,   0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,
+          0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.05,   0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,
+          0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.05,   0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,
+          0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.05,   0.0,    0.0,    0.0,    0.0,    0.0,    0.0,
+          0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.01,   0.0,    0.0,    0.0,    0.0,    0.0,
+          0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.01,   0.0,    0.0,    0.0,    0.0,
+          0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.02,   0.0,    0.0,    0.0,
+          0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.5,    0.0,     0.0,
+          0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.5,    0.0,
+          0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.5]
+          
+          
+          
+          
+        # [ADVANCED] This represents the initial value for the state estimate error covariance matrix. Setting a diagonal
+        # value (variance) to a large value will result in rapid convergence for initial measurements of the variable in
+        # question. Users should take care not to use large values for variables that will not be measured directly. The values
+        # are ordered as x, y, z, roll, pitch, yaw, vx, vy, vz, vroll, vpitch, vyaw, ax, ay, az. Defaults to the diagonal values below
+        # if unspecified. In this example, we specify only the diagonal of the matrix.
+        #initial_estimate_covariance: [1e-9, 1e-9, 1e-9, 1e-9, 1e-9, 1e-9, 1e-9, 1e-9, 1e-9, 1e-9, 1e-9, 1e-9, 1e-9, 1e-9, 1e-9]
+        initial_estimate_covariance: [
+          1.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,
+          0.0,    1.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,
+          0.0,    0.0,    1.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,
+          0.0,    0.0,    0.0,    1.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,
+          0.0,    0.0,    0.0,    0.0,    1.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,
+          0.0,    0.0,    0.0,    0.0,    0.0,    1.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,
+          0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    1.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,
+          0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    1.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,
+          0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    1.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,
+          0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    1.0,    0.0,    0.0,    0.0,    0.0,    0.0,
+          0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    1.0,    0.0,    0.0,    0.0,    0.0,
+          0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    1.0,    0.0,    0.0,    0.0,
+          0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.05,   0.0,    0.0,
+          0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.05,   0.0,
+          0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.05]
+
+
+
+
+        # [ADVANCED, UKF ONLY] The alpha and kappa variables control the spread of the sigma points. Unless you are familiar
+        # with UKFs, it's probably a good idea to leave these alone.
+        # Defaults to 0.001 if unspecified.
+        alpha: 0.001 #1.0 # 0.001 default
+        # Defaults to 0 if unspecified.
+        kappa: 0.0
+
+        # [ADVANCED, UKF ONLY] The beta variable relates to the distribution of the state vector. Again, it's probably best to
+        # leave this alone if you're uncertain. Defaults to 2 if unspecified.
+        beta: 2.0
+
+
+--------------------------------------------------
+FICHIER : src/platform_bringup/config/ekf.yaml
+--------------------------------------------------
+### ekf config file ###
+ekf_filter_node:
+    ros__parameters:
+        # The frequency, in Hz, at which the filter will output a position estimate. Note that the filter will not begin
+        # computation until it receives at least one message from one of the inputs. It will then run continuously at the
+        # frequency specified here, regardless of whether it receives more measurements. Defaults to 30 if unspecified.
+        frequency: 30.0
+
+        # The period, in seconds, after which we consider a sensor to have timed out. In this event, we carry out a predict
+        # cycle on the EKF without correcting it. This parameter can be thought of as the minimum frequency with which the
+        # filter will generate new output. Defaults to 1 / frequency if not specified.
+        sensor_timeout: 0.1
+
+        # ekf_localization_node and ukf_localization_node both use a 3D omnidirectional motion model. If this parameter is
+        # set to true, no 3D information will be used in your state estimate. Use this if you are operating in a planar
+        # environment and want to ignore the effect of small variations in the ground plane that might otherwise be detected
+        # by, for example, an IMU. Defaults to false if unspecified.
+        two_d_mode: false
+
+        # Use this parameter to provide an offset to the transform generated by ekf_localization_node. This can be used for
+        # future dating the transform, which is required for interaction with some other packages. Defaults to 0.0 if
+        # unspecified.
+        transform_time_offset: 0.0
+
+        # Use this parameter to provide specify how long the tf listener should wait for a transform to become available. 
+        # Defaults to 0.0 if unspecified.
+        transform_timeout: 0.0
+
+        # If you're having trouble, try setting this to true, and then echo the /diagnostics_agg topic to see if the node is
+        # unhappy with any settings or data.
+        print_diagnostics: true
+
+        # Debug settings. Not for the faint of heart. Outputs a ludicrous amount of information to the file specified by
+        # debug_out_file. I hope you like matrices! Please note that setting this to true will have strongly deleterious
+        # effects on the performance of the node. Defaults to false if unspecified.
+        debug: false
+
+        # Defaults to "robot_localization_debug.txt" if unspecified. Please specify the full path.
+        debug_out_file: robot_localization_debug.txt
+
+        # Whether we'll allow old measurements to cause a re-publication of the updated state
+        permit_corrected_publication: false
+
+        # Whether to publish the acceleration state. Defaults to false if unspecified.
+        publish_acceleration: false
+
+        # Whether to broadcast the transformation over the /tf topic. Defaults to true if unspecified.
+        publish_tf: true
+
+        # REP-105 (http://www.ros.org/reps/rep-0105.html) specifies four principal coordinate frames: base_link, odom, map, and
+        # earth. base_link is the coordinate frame that is affixed to the robot. Both odom and map are world-fixed frames.
+        # The robot's position in the odom frame will drift over time, but is accurate in the short term and should be
+        # continuous. The odom frame is therefore the best frame for executing local motion plans. The map frame, like the odom
+        # frame, is a world-fixed coordinate frame, and while it contains the most globally accurate position estimate for your
+        # robot, it is subject to discrete jumps, e.g., due to the fusion of GPS data or a correction from a map-based
+        # localization node. The earth frame is used to relate multiple map frames by giving them a common reference frame.
+        # ekf_localization_node and ukf_localization_node are not concerned with the earth frame.
+        # Here is how to use the following settings:
+        # 1. Set the map_frame, odom_frame, and base_link frames to the appropriate frame names for your system.
+        #     1a. If your system does not have a map_frame, just remove it, and make sure "world_frame" is set to the value of
+        #         odom_frame.
+        # 2. If you are fusing continuous position data such as wheel encoder odometry, visual odometry, or IMU data, set
+        #   "world_frame" to your odom_frame value. This is the default behavior for robot_localization's state estimation nodes.
+        # 3. If you are fusing global absolute position data that is subject to discrete jumps (e.g., GPS or position updates
+        # from landmark observations) then:
+        #     3a. Set your "world_frame" to your map_frame value
+        #     3b. MAKE SURE something else is generating the odom->base_link transform. Note that this can even be another state
+        #         estimation node from robot_localization! However, that instance should *not* fuse the global data.
+        map_frame: map              # Defaults to "map" if unspecified
+        odom_frame: odom            # Defaults to "odom" if unspecified
+        base_link_frame: base_link  # Defaults to "base_link" if unspecified
+        world_frame: odom           # Defaults to the value of odom_frame if unspecified
+
+        # The filter accepts an arbitrary number of inputs from each input message type (nav_msgs/Odometry,
+        # geometry_msgs/PoseWithCovarianceStamped, geometry_msgs/TwistWithCovarianceStamped,
+        # sensor_msgs/Imu). To add an input, simply append the next number in the sequence to its "base" name, e.g., odom0,
+        # odom1, twist0, twist1, imu0, imu1, imu2, etc. The value should be the topic name. These parameters obviously have no
+        # default values, and must be specified.
+        odom0: /ov_msckf/odomimu
+
+        # Each sensor reading updates some or all of the filter's state. These options give you greater control over which
+        # values from each measurement are fed to the filter. For example, if you have an odometry message as input, but only
+        # want to use its Z position value, then set the entire vector to false, except for the third entry. The order of the
+        # values is x, y, z, roll, pitch, yaw, vx, vy, vz, vroll, vpitch, vyaw, ax, ay, az. Note that not some message types
+        # do not provide some of the state variables estimated by the filter. For example, a TwistWithCovarianceStamped message
+        # has no pose information, so the first six values would be meaningless in that case. Each vector defaults to all false
+        # if unspecified, effectively making this parameter required for each sensor.
+        odom0_config: [true, true, true,
+                       true, true, true,
+                       true, true, true,
+                       true, true, true,
+                       false, false, false]
+
+        # If you have high-frequency data or are running with a low frequency parameter value, then you may want to increase
+        # the size of the subscription queue so that more measurements are fused.
+        odom0_queue_size: 20
+
+        # [ADVANCED] When measuring one pose variable with two sensors, a situation can arise in which both sensors under-
+        # report their covariances. This can lead to the filter rapidly jumping back and forth between each measurement as they
+        # arrive. In these cases, it often makes sense to (a) correct the measurement covariances, or (b) if velocity is also
+        # measured by one of the sensors, let one sensor measure pose, and the other velocity. However, doing (a) or (b) isn't
+        # always feasible, and so we expose the differential parameter. When differential mode is enabled, all absolute pose
+        # data is converted to velocity data by differentiating the absolute pose measurements. These velocities are then
+        # integrated as usual. NOTE: this only applies to sensors that provide pose measurements; setting differential to true
+        # for twist measurements has no effect.
+        odom0_differential: false
+
+        # [ADVANCED] When the node starts, if this parameter is true, then the first measurement is treated as a "zero point"
+        # for all future measurements. While you can achieve the same effect with the differential paremeter, the key
+        # difference is that the relative parameter doesn't cause the measurement to be converted to a velocity before
+        # integrating it. If you simply want your measurements to start at 0 for a given sensor, set this to true.
+        odom0_relative: false
+
+        # [ADVANCED] Whether to use the starting pose of child_frame_id as the origin of odometry.
+        # Note: this is different from setting odom0_relative to true, as when child_frame is different from 
+        # base_link_frame, the rotation of base_link will be coupled into the translation of child_frame.
+        # Set to true for fusing secondary odometry sources that are rigidly connected to base_link but has a non-zero 
+        # offset from base_link.
+        odom0_pose_use_child_frame: false
+
+        # [ADVANCED] If your data is subject to outliers, use these threshold settings, expressed as Mahalanobis distances, to
+        # control how far away from the current vehicle state a sensor measurement is permitted to be. Each defaults to
+        # numeric_limits<double>::max() if unspecified. It is strongly recommended that these parameters be removed if not
+        # required. Data is specified at the level of pose and twist variables, rather than for each variable in isolation.
+        # For messages that have both pose and twist data, the parameter specifies to which part of the message we are applying
+        # the thresholds.
+        odom0_pose_rejection_threshold: 5.0
+        odom0_twist_rejection_threshold: 1.0
+
+        
+        pose0: /optical_flow/range
+        pose0_config: [false, false, true,
+                       false, false, false,
+                       false, false, false,
+                       false, false, false,
+                       false, false, false]
+        pose0_differential: true
+        pose0_relative: false
+        pose0_queue_size: 20
+        pose0_rejection_threshold: 2.0  # Note the difference in parameter name
+
+        twist0: /optical_flow/velocity
+        twist0_config: [false, false, false,
+                        false, false, false,
+                        true,  true,  false,
+                        false, false, false,
+                        false, false, false]
+        twist0_queue_size: 20
+        twist0_rejection_threshold: 2.0
+
+        imu0: /imu/fused
+        imu0_config: [false, false, false,
+                      true,  true,  true,
+                      false, false, false,
+                      true,  true,  true,
+                      true,  true,  true]
+        imu0_differential: false
+        imu0_relative: true
+        imu0_queue_size: 20
+        imu0_pose_rejection_threshold: 0.8                 # Note the difference in parameter names
+        imu0_twist_rejection_threshold: 0.8                #
+        imu0_linear_acceleration_rejection_threshold: 0.8  #
+
+        # [ADVANCED] Some IMUs automatically remove acceleration due to gravity, and others don't. If yours doesn't, please set
+        # this to true, and *make sure* your data conforms to REP-103, specifically, that the data is in ENU frame.
+        imu0_remove_gravitational_acceleration: true
+
+        # [ADVANCED]  The EKF and UKF models follow a standard predict/correct cycle. During prediction, if there is no
+        # acceleration reference, the velocity at time t+1 is simply predicted to be the same as the velocity at time t. During
+        # correction, this predicted value is fused with the measured value to produce the new velocity estimate. This can be
+        # problematic, as the final velocity will effectively be a weighted average of the old velocity and the new one. When
+        # this velocity is the integrated into a new pose, the result can be sluggish covergence. This effect is especially
+        # noticeable with LIDAR data during rotations. To get around it, users can try inflating the process_noise_covariance
+        # for the velocity variable in question, or decrease the  variance of the variable in question in the measurement
+        # itself. In addition, users can also take advantage of the control command being issued to the robot at the time we
+        # make the prediction. If control is used, it will get converted into an acceleration term, which will be used during
+        # predicition. Note that if an acceleration measurement for the variable in question is available from one of the
+        # inputs, the control term will be ignored.
+        # Whether or not we use the control input during predicition. Defaults to false.
+        use_control: false
+
+        # Whether the input (assumed to be cmd_vel) is a geometry_msgs/Twist or geometry_msgs/TwistStamped message. Defaults to
+        # false.
+        stamped_control: true
+
+        # The last issued control command will be used in prediction for this period. Defaults to 0.2.
+        control_timeout: 0.2
+
+        # Which velocities are being controlled. Order is vx, vy, vz, vroll, vpitch, vyaw.
+        control_config: [true, false, false, false, false, true]
+
+        # Places limits on how large the acceleration term will be. Should match your robot's kinematics.
+        acceleration_limits: [1.3, 0.0, 0.0, 0.0, 0.0, 3.4]
+
+        # Acceleration and deceleration limits are not always the same for robots.
+        deceleration_limits: [1.3, 0.0, 0.0, 0.0, 0.0, 4.5]
+
+        # If your robot cannot instantaneously reach its acceleration limit, the permitted change can be controlled with these
+        # gains
+        acceleration_gains: [0.8, 0.0, 0.0, 0.0, 0.0, 0.9]
+
+        # If your robot cannot instantaneously reach its deceleration limit, the permitted change can be controlled with these
+        # gains
+        deceleration_gains: [1.0, 0.0, 0.0, 0.0, 0.0, 1.0]
+
+        # [ADVANCED] The process noise covariance matrix can be difficult to tune, and can vary for each application, so it is
+        # exposed as a configuration parameter. This matrix represents the noise we add to the total error after each
+        # prediction step. The better the omnidirectional motion model matches your system, the smaller these values can be.
+        # However, if users find that a given variable is slow to converge, one approach is to increase the
+        # process_noise_covariance diagonal value for the variable in question, which will cause the filter's predicted error
+        # to be larger, which will cause the filter to trust the incoming measurement more during correction. The values are
+        # ordered as x, y, z, roll, pitch, yaw, vx, vy, vz, vroll, vpitch, vyaw, ax, ay, az. Defaults to the matrix below if
+        # unspecified.
+        # Note: the specification of covariance matrices can be cumbersome, so all matrix parameters in this package support
+        # both full specification or specification of only the diagonal values.
+        process_noise_covariance: [0.05, 0.0,    0.0,    0.0,    0.0,    0.0,    0.0,     0.0,     0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,
+                                   0.0,    0.05, 0.0,    0.0,    0.0,    0.0,    0.0,     0.0,     0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,
+                                   0.0,    0.0,    0.06, 0.0,    0.0,    0.0,    0.0,     0.0,     0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,
+                                   0.0,    0.0,    0.0,    0.03, 0.0,    0.0,    0.0,     0.0,     0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,
+                                   0.0,    0.0,    0.0,    0.0,    0.03, 0.0,    0.0,     0.0,     0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,
+                                   0.0,    0.0,    0.0,    0.0,    0.0,    0.06, 0.0,     0.0,     0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,
+                                   0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.025, 0.0,     0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,
+                                   0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,     0.025, 0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,
+                                   0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,     0.0,     0.04, 0.0,    0.0,    0.0,    0.0,    0.0,    0.0,
+                                   0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,     0.0,     0.0,    0.01, 0.0,    0.0,    0.0,    0.0,    0.0,
+                                   0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,     0.0,     0.0,    0.0,    0.01, 0.0,    0.0,    0.0,    0.0,
+                                   0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,     0.0,     0.0,    0.0,    0.0,    0.02, 0.0,    0.0,    0.0,
+                                   0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,     0.0,     0.0,    0.0,    0.0,    0.0,    0.01, 0.0,    0.0,
+                                   0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,     0.0,     0.0,    0.0,    0.0,    0.0,    0.0,    0.01, 0.0,
+                                   0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,     0.0,     0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.015]
+
+        # [ADVANCED] This represents the initial value for the state estimate error covariance matrix. Setting a diagonal
+        # value (variance) to a large value will result in rapid convergence for initial measurements of the variable in
+        # question. Users should take care not to use large values for variables that will not be measured directly. The values
+        # are ordered as x, y, z, roll, pitch, yaw, vx, vy, vz, vroll, vpitch, vyaw, ax, ay, az. Defaults to the diagonal values below
+        # if unspecified. In this example, we specify only the diagonal of the matrix.
+        initial_estimate_covariance: [1e-9, 1e-9, 1e-9, 1e-9, 1e-9, 1e-9, 1e-9, 1e-9, 1e-9, 1e-9, 1e-9, 1e-9, 1e-9, 1e-9, 1e-9]
+
+
+--------------------------------------------------
+FICHIER : src/platform_bringup/config/inekf.yaml
+--------------------------------------------------
+inekf_node:
+  ros__parameters:
+    frame_id: "odom"
+    child_frame_id: "base_link"
+    imu_topic: "/olivecam/filtered_ahrs_synced"
+    
+    velocity_topic: "/imu/velocity_synced"
+    
+    noise:
+      gyro_bias: 1e-4
+      accel_bias: 1e-2
+      
+      
+      
+      
+      
+      
+      
+      
+      
+# ===============FOR LATER==================
+
+
+--------------------------------------------------
+FICHIER : src/platform_bringup/package.xml
+--------------------------------------------------
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>platform_bringup</name>
+  <version>0.0.0</version>
+  <description>TODO: Package description</description>
+  <maintainer email="student@todo.todo">student</maintainer>
+  <license>TODO: License declaration</license>
+
+  <buildtool_depend>ament_cmake</buildtool_depend>
+  <exec_depend>realsense2_camera</exec_depend>
+  <exec_depend>isaac_ros_image_proc</exec_depend>
+
+  <test_depend>ament_lint_auto</test_depend>
+  <test_depend>ament_lint_common</test_depend>
+
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>
