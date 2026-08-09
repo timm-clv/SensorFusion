@@ -318,7 +318,7 @@ void onTransferReceived(CanardInstance* ins, CanardRxTransfer* transfer) {
 	    
 	        float d = node->current_distance_z_; // * cosf(roll) * cosf(pitch);
 		float raw_vel_x = -flow_rate_y * d;
-                float raw_vel_y = -flow_rate_x * d;
+                float raw_vel_y = flow_rate_x * d;
 
 		float vel_x = node->vx_filter_.update(raw_vel_x);
                 float vel_y = node->vy_filter_.update(raw_vel_y);

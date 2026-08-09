@@ -37,8 +37,8 @@ public:
 
     
     // Params declaration
-    this->declare_parameter("variance_orientation_rp", 0.000076); // 0.5° RMSE -> rad**2 Roll/Pitch -> 0.000076
-    this->declare_parameter("variance_orientation_y", 0.0012);    // < 2° RMSE -> rad**2 Yaw ->  0.0012
+    this->declare_parameter("variance_orientation_rp", 0.000076); // 0.5° RMSE in datasheet (page3->metric->Attitude Accuracy) -> 0.5°*pi/180 = error in rad -> (error in rad)**2 = var = 0.000076
+    this->declare_parameter("variance_orientation_y", 0.0012);    // < 2° RMSE -> same that above
     this->declare_parameter("variance_angular_velocity", 0.000177); // Gyroscopes = 0.013307796^2  = 0.000177
     this->declare_parameter("variance_linear_acceleration", 0.001); // Accelerometers = (0.00019789082)^2 =0.0000000391607766
     
@@ -167,7 +167,7 @@ public:
     //pub_cam_raw_imu_synced_ = this->create_publisher<sensor_msgs::msg::Imu>(
     //  "/olivecam/imu_raw_synced", rclcpp::SensorDataQoS());
 
-    // Initialisation des abonnés message_filters (attention, pas de callback direct ici)
+    // Initializing message_filters subscribers
     //rmw_qos_profile_t qos_profile = rmw_qos_profile_sensor_data;
     //mf_sub_cam_acc_ = std::make_shared<message_filters::Subscriber<geometry_msgs::msg::AccelStamped>>(
     //  this, "/olive/camera/olivecam/linear_acc", qos_profile);
@@ -175,16 +175,16 @@ public:
     //mf_sub_cam_twist_ = std::make_shared<message_filters::Subscriber<geometry_msgs::msg::TwistStamped>>(
     //  this, "/olive/camera/olivecam/twist", qos_profile);
 
-    // Initialisation du synchroniseur (Taille de la file d'attente = 10)
+    // Initializing the synchronizer (Queue size = 10)
     //sync_raw_imu_ = std::make_shared<message_filters::Synchronizer<SyncPolicyRawImu>>(
     //  SyncPolicyRawImu(10), *mf_sub_cam_acc_, *mf_sub_cam_twist_);
       
-    // Liaison du callback qui sera déclenché uniquement quand les deux messages sont appairés
+    // Set the callback that will be triggered only when the two messages are matched
     //sync_raw_imu_->registerCallback(
     //  std::bind(&ImuSyncComponent::rawImuMergeCallback, this, std::placeholders::_1, std::placeholders::_2));  
       
 
-    RCLCPP_INFO(this->get_logger(), "Nœud de synchronisation actif : Offsets statiques verrouillés au premier message.");
+    RCLCPP_INFO(this->get_logger(), "Active synchronization node: Static offsets locked at the first message.");
   }
 
 private:
@@ -199,7 +199,7 @@ private:
   //std::shared_ptr<message_filters::Subscriber<geometry_msgs::msg::AccelStamped>> mf_sub_cam_acc_;
   //std::shared_ptr<message_filters::Subscriber<geometry_msgs::msg::TwistStamped>> mf_sub_cam_twist_;
   
-  // Le Synchroniseur
+  // The Synchronizer
   //std::shared_ptr<message_filters::Synchronizer<SyncPolicyRawImu>> sync_raw_imu_;
   // Le nouveau Publisher pour l'IMU brut combiné
   //rclcpp::Publisher<sensor_msgs::msg::Imu>::SharedPtr pub_cam_raw_imu_synced_;
