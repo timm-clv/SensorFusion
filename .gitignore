@@ -2,5 +2,4 @@ sensor_platform_ws/build/
 sensor_platform_ws/install/
 sensor_platform_ws/log/
 aw_ws/
-kalibr/
 slam_ws/
