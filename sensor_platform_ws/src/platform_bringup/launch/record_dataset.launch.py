@@ -31,6 +31,7 @@ def generate_launch_description():
         
         # --- Pose estimation ---
         '/odometry/filtered_ukf',
+        '/odometry/filtered_ekf',
         '/ov_msckf/odomimu'
     ]
     

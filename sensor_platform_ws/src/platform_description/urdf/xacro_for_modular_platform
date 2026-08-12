@@ -1,0 +1,188 @@
+<?xml version="1.0"?>
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="drone_sensor_platform">
+
+
+
+
+
+
+<!-- In this file, we choose the position and orientation of each sensors 
+     Everything is made with translation with "<origin ...>"
+     Some of the position has been took buy calibration so don't change them
+     Each sensors has to be notified here
+     Critic points : check well the frame_id and child.frame_id of the topics,
+     if they are not corresponding to the one called here, there will be no Tf and the UKF not work well
+-->
+
+
+
+
+
+
+
+
+
+
+
+  <link name="base_link">
+    <visual>
+      <geometry>
+        <box size="0.48 0.03 0.03"/> 
+      </geometry>
+      <material name="alu_gray">
+        <color rgba="0.6 0.6 0.6 1.0"/>
+      </material>
+    </visual>
+  </link>
+  
+  
+  
+  
+  
+  
+  
+
+  <link name="jetson_link">
+    <visual>
+      <geometry>
+        <box size="0.103 0.0905 0.03477"/>
+      </geometry>
+      <material name="nvidia_green">
+        <color rgba="0.1 0.2 0.1 1.0"/>
+      </material>
+    </visual>
+  </link>
+
+  <joint name="base_to_jetson" type="fixed">
+    <parent link="base_link"/>
+    <child link="jetson_link"/>
+    <origin xyz="0.04 0.0 0.032385" rpy="0 0 0"/> 
+  </joint>
+  
+  
+  
+  
+  
+  
+  
+  
+  
+
+  <link name="imu_link">
+    <visual>
+      <geometry>
+        <box size="0.04 0.04 0.01"/>
+      </geometry>
+      <material name="dark_gray">
+        <color rgba="0.2 0.2 0.2 1.0"/>
+      </material>
+    </visual>
+  </link>
+
+  <joint name="base_to_olive_imu" type="fixed">
+    <parent link="base_link"/>
+    <child link="imu_link"/>
+    <origin xyz="0.17 0.0 0.02" rpy="0 0 ${pi/2}"/> 
+  </joint>
+  
+
+  <link name="oliveimu_base_link"/>
+  
+  <joint name="imu_to_oliveimu_bridge" type="fixed">
+    <parent link="imu_link"/>
+    <child link="oliveimu_base_link"/>
+    <origin xyz="0 0 0" rpy="0 0 0"/> 
+  </joint>
+  
+  
+  
+  
+  
+  
+
+  <link name="olivecam_link">
+    <visual>
+      <geometry>
+        <box size="0.038 0.038 0.024"/>
+      </geometry>
+      <material name="silver">
+        <color rgba="0.8 0.8 0.8 1.0"/>
+      </material>
+    </visual>
+  </link>
+
+  <joint name="base_to_olive_cam" type="fixed">
+    <parent link="base_link"/>
+    <child link="olivecam_link"/>
+    <origin xyz="-0.155 0.0 0.034" rpy="${-pi/2} ${-pi/2} 0"/> 
+  </joint>
+
+  <link name="olivecam_optical_frame"/>
+  <joint name="olivecam_link_to_optical" type="fixed">
+    <parent link="olivecam_link"/>
+    <child link="olivecam_optical_frame"/>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+  </joint>
+  
+  <link name="olivecam_imu_frame"/>
+  <joint name="olivecam_link_to_imu" type="fixed">
+    <parent link="olivecam_link"/>
+    <child link="olivecam_imu_frame"/>
+    <origin xyz="0 0 0" rpy="0 0 0"/> 
+  </joint>
+  
+  
+  
+  
+  
+  
+  
+  
+
+  <link name="optical_flow_link">
+    <visual>
+      <geometry>
+        <box size="0.03 0.03 0.015"/>
+      </geometry>
+      <material name="black">
+        <color rgba="0.1 0.1 0.1 1.0"/>
+      </material>
+    </visual>
+  </link>
+
+  <joint name="base_to_holybro_flow" type="fixed">
+    <parent link="base_link"/>
+    <child link="optical_flow_link"/>
+    <origin xyz="0.17 0.0 -0.0225" rpy="${pi} 0 ${-pi/2}"/> 
+  </joint>
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+
+
+  <xacro:include filename="$(find realsense2_description)/urdf/_d435i.urdf.xacro" />
+
+  <xacro:sensor_d435i parent="base_link" name="d435" use_nominal_extrinsics="true">
+    <origin xyz="-0.191 0.017 0.039" rpy="0 0 ${pi}"/>
+  </xacro:sensor_d435i>
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+</robot>

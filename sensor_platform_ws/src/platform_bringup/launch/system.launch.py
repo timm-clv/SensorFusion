@@ -145,6 +145,20 @@ def generate_launch_description():
         ]
     )
     
+    
+    # EKF launch
+    ekf_launch = TimerAction(
+        period=16.0, 
+        actions=[
+            IncludeLaunchDescription(
+                PythonLaunchDescriptionSource(
+                   os.path.join(pkg_bringup, 'launch', 'ekf_fusion.launch.py')
+                ),
+                launch_arguments={'use_sim_time': 'false'}.items()
+            )
+        ]
+    )
+    
 
 
     # OpenVins launch 
@@ -170,5 +184,6 @@ def generate_launch_description():
         delayed_realsense,
         vrpn_node,
         ukf_launch,
+        ekf_launch,
         delayed_openvins
     ])
