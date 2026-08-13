@@ -2,12 +2,11 @@
 <robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="drone_sensor_platform">
 
   <!-- ================================================================= -->
-  <!-- 0. BASE LINK (Nouvelle Plateforme 19cm x 8cm x 8mm)               -->
+  <!--  BASE LINK (New Platform 19cm x 8cm x 8mm)            -->
   <!-- ================================================================= -->
   <link name="base_link">
     <visual>
       <geometry>
-        <!-- X=0.19m, Y=0.08m, Z=0.008m -->
         <box size="0.19 0.08 0.008"/> 
       </geometry>
       <material name="alu_gray">
@@ -17,7 +16,7 @@
   </link>
   
   <!-- ================================================================= -->
-  <!-- 1. ORDINATEUR EMBARQUÉ : NVIDIA Jetson Orin Nano                  -->
+  <!-- EMBEDDED COMPUTER: NVIDIA Jetson Orin Nano     -->
   <!-- ================================================================= -->
   <link name="jetson_link">
     <visual>
@@ -33,12 +32,11 @@
   <joint name="base_to_jetson" type="fixed">
     <parent link="base_link"/>
     <child link="jetson_link"/>
-    <!-- Positionné à l'arrière (X=-0.04m) pour contrepoids -->
     <origin xyz="-0.04 0.0 0.021385" rpy="0 0 0"/> 
   </joint>
   
   <!-- ================================================================= -->
-  <!-- 2. FLUX OPTIQUE : Holybro H-Flow                                  -->
+  <!-- OPTICAL FLOW: Holybro H-Flow -->
   <!-- ================================================================= -->
   <link name="optical_flow_link">
     <visual>
@@ -54,17 +52,18 @@
   <joint name="base_to_holybro_flow" type="fixed">
     <parent link="base_link"/>
     <child link="optical_flow_link"/>
-    <!-- 1cm de l'avant, en dessous de la plaque -->
-    <origin xyz="0.07 0.0 -0.0115" rpy="${pi} 0 ${-pi/2}"/> 
+    <!-- unchanged platform 
+    <origin xyz="0.07 0.0 -0.0115" rpy="${pi} 0 ${-pi/2}"/> -->
+    <!-- Spot example -->
+    <origin xyz="0.07 0.0 -0.0115" rpy="${pi} 0 ${-pi/2}"/>
   </joint>
 
   <!-- ================================================================= -->
-  <!-- 3. IMU : OliveSense X1 Pro                                        -->
+  <!-- 3. IMU : OliveSense X1 Pro  -->
   <!-- ================================================================= -->
   <link name="imu_link">
     <visual>
       <geometry>
-        <!-- Dimensions réelles: 40mm x 40mm x 10mm -->
         <box size="0.04 0.04 0.01"/>
       </geometry>
       <material name="dark_gray">
@@ -76,7 +75,6 @@
   <joint name="base_to_olive_imu" type="fixed">
     <parent link="base_link"/>
     <child link="imu_link"/>
-    <!-- Aligné avec le H-Flow (X=0.085), au-dessus de la plaque -->
     <origin xyz="0.07 0.0 0.009" rpy="0 0 ${pi/2}"/> 
   </joint>
   
@@ -88,12 +86,11 @@
   </joint>
   
   <!-- ================================================================= -->
-  <!-- 4. CAMÉRA : OliveVision V1                                        -->
+  <!-- 4. CAMERA : OliveVision V1 -->
   <!-- ================================================================= -->
   <link name="olivecam_link">
     <visual>
       <geometry>
-        <!-- Dimensions réelles: 38.0mm x 38.0mm x 38.3mm -->
         <box size="0.038 0.038 0.0383"/>
       </geometry>
       <material name="silver">
@@ -105,7 +102,6 @@
   <joint name="base_to_olive_cam" type="fixed">
     <parent link="base_link"/>
     <child link="olivecam_link"/>
-    <!-- Aligné (X=0.085), 4cm au-dessus du centre de l'IMU -->
     <origin xyz="0.085 0.0 0.049" rpy="${-pi/2} ${-pi/2} 0"/> 
   </joint>
 
@@ -124,12 +120,11 @@
   </joint>
 
 <!-- ================================================================= -->
-  <!-- INTEL REALSENSE D435i (Issue de la calibration Kalibr)            -->
+  <!-- INTEL REALSENSE D435i -->
   <!-- ================================================================= -->
   <xacro:include filename="$(find realsense2_description)/urdf/_d435i.urdf.xacro" />
 
   <xacro:sensor_d435i parent="base_link" name="d435" use_nominal_extrinsics="true">
-    <!-- XYZ (mètres) et RPY (rad) calculés depuis T_ic et la pose de l'IMU -->
     <origin xyz="0.06 0.0 0.049" rpy="0 0 0"/>
   </xacro:sensor_d435i>
   
