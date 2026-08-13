@@ -40,7 +40,7 @@ public:
     this->declare_parameter("variance_orientation_rp", 0.000076); // 0.5° RMSE in datasheet (page3->metric->Attitude Accuracy) -> 0.5°*pi/180 = error in rad -> (error in rad)**2 = var = 0.000076
     this->declare_parameter("variance_orientation_y", 0.0012);    // < 2° RMSE -> same that above
     this->declare_parameter("variance_angular_velocity", 0.000177); // Gyroscopes = 0.013307796^2  = 0.000177
-    this->declare_parameter("variance_linear_acceleration", 0.001); // Accelerometers = (0.00019789082)^2 =0.0000000391607766
+    this->declare_parameter("variance_linear_acceleration", 0.0000000391607766); // Accelerometers = (0.00019789082)^2 =0.0000000391607766
     
     var_ori_rp_ = this->get_parameter("variance_orientation_rp").as_double();
     var_ori_y_ = this->get_parameter("variance_orientation_y").as_double();

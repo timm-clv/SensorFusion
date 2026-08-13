@@ -852,12 +852,11 @@ FICHIER : src/platform_description/urdf/sensor_platform.urdf.xacro
 <robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="drone_sensor_platform">
 
   <!-- ================================================================= -->
-  <!-- 0. BASE LINK (Nouvelle Plateforme 19cm x 8cm x 8mm)               -->
+  <!--  BASE LINK (New Platform 19cm x 8cm x 8mm)            -->
   <!-- ================================================================= -->
   <link name="base_link">
     <visual>
       <geometry>
-        <!-- X=0.19m, Y=0.08m, Z=0.008m -->
         <box size="0.19 0.08 0.008"/> 
       </geometry>
       <material name="alu_gray">
@@ -867,7 +866,7 @@ FICHIER : src/platform_description/urdf/sensor_platform.urdf.xacro
   </link>
   
   <!-- ================================================================= -->
-  <!-- 1. ORDINATEUR EMBARQUÉ : NVIDIA Jetson Orin Nano                  -->
+  <!-- EMBEDDED COMPUTER: NVIDIA Jetson Orin Nano     -->
   <!-- ================================================================= -->
   <link name="jetson_link">
     <visual>
@@ -883,12 +882,11 @@ FICHIER : src/platform_description/urdf/sensor_platform.urdf.xacro
   <joint name="base_to_jetson" type="fixed">
     <parent link="base_link"/>
     <child link="jetson_link"/>
-    <!-- Positionné à l'arrière (X=-0.04m) pour contrepoids -->
     <origin xyz="-0.04 0.0 0.021385" rpy="0 0 0"/> 
   </joint>
   
   <!-- ================================================================= -->
-  <!-- 2. FLUX OPTIQUE : Holybro H-Flow                                  -->
+  <!-- OPTICAL FLOW: Holybro H-Flow -->
   <!-- ================================================================= -->
   <link name="optical_flow_link">
     <visual>
@@ -904,17 +902,18 @@ FICHIER : src/platform_description/urdf/sensor_platform.urdf.xacro
   <joint name="base_to_holybro_flow" type="fixed">
     <parent link="base_link"/>
     <child link="optical_flow_link"/>
-    <!-- 1cm de l'avant, en dessous de la plaque -->
-    <origin xyz="0.07 0.0 -0.0115" rpy="${pi} 0 ${-pi/2}"/> 
+    <!-- unchanged platform 
+    <origin xyz="0.07 0.0 -0.0115" rpy="${pi} 0 ${-pi/2}"/> -->
+    <!-- Spot example -->
+    <origin xyz="-0.66 0.0 -0.115" rpy="${pi} 0 0"/>
   </joint>
 
   <!-- ================================================================= -->
-  <!-- 3. IMU : OliveSense X1 Pro                                        -->
+  <!-- 3. IMU : OliveSense X1 Pro  -->
   <!-- ================================================================= -->
   <link name="imu_link">
     <visual>
       <geometry>
-        <!-- Dimensions réelles: 40mm x 40mm x 10mm -->
         <box size="0.04 0.04 0.01"/>
       </geometry>
       <material name="dark_gray">
@@ -926,7 +925,6 @@ FICHIER : src/platform_description/urdf/sensor_platform.urdf.xacro
   <joint name="base_to_olive_imu" type="fixed">
     <parent link="base_link"/>
     <child link="imu_link"/>
-    <!-- Aligné avec le H-Flow (X=0.085), au-dessus de la plaque -->
     <origin xyz="0.07 0.0 0.009" rpy="0 0 ${pi/2}"/> 
   </joint>
   
@@ -938,12 +936,11 @@ FICHIER : src/platform_description/urdf/sensor_platform.urdf.xacro
   </joint>
   
   <!-- ================================================================= -->
-  <!-- 4. CAMÉRA : OliveVision V1                                        -->
+  <!-- 4. CAMERA : OliveVision V1 -->
   <!-- ================================================================= -->
   <link name="olivecam_link">
     <visual>
       <geometry>
-        <!-- Dimensions réelles: 38.0mm x 38.0mm x 38.3mm -->
         <box size="0.038 0.038 0.0383"/>
       </geometry>
       <material name="silver">
@@ -955,7 +952,6 @@ FICHIER : src/platform_description/urdf/sensor_platform.urdf.xacro
   <joint name="base_to_olive_cam" type="fixed">
     <parent link="base_link"/>
     <child link="olivecam_link"/>
-    <!-- Aligné (X=0.085), 4cm au-dessus du centre de l'IMU -->
     <origin xyz="0.085 0.0 0.049" rpy="${-pi/2} ${-pi/2} 0"/> 
   </joint>
 
@@ -974,12 +970,11 @@ FICHIER : src/platform_description/urdf/sensor_platform.urdf.xacro
   </joint>
 
 <!-- ================================================================= -->
-  <!-- INTEL REALSENSE D435i (Issue de la calibration Kalibr)            -->
+  <!-- INTEL REALSENSE D435i -->
   <!-- ================================================================= -->
   <xacro:include filename="$(find realsense2_description)/urdf/_d435i.urdf.xacro" />
 
   <xacro:sensor_d435i parent="base_link" name="d435" use_nominal_extrinsics="true">
-    <!-- XYZ (mètres) et RPY (rad) calculés depuis T_ic et la pose de l'IMU -->
     <origin xyz="0.06 0.0 0.049" rpy="0 0 0"/>
   </xacro:sensor_d435i>
   
@@ -1111,7 +1106,7 @@ public:
     this->declare_parameter("variance_orientation_rp", 0.000076); // 0.5° RMSE in datasheet (page3->metric->Attitude Accuracy) -> 0.5°*pi/180 = error in rad -> (error in rad)**2 = var = 0.000076
     this->declare_parameter("variance_orientation_y", 0.0012);    // < 2° RMSE -> same that above
     this->declare_parameter("variance_angular_velocity", 0.000177); // Gyroscopes = 0.013307796^2  = 0.000177
-    this->declare_parameter("variance_linear_acceleration", 0.001); // Accelerometers = (0.00019789082)^2 =0.0000000391607766
+    this->declare_parameter("variance_linear_acceleration", 0.0000000391607766); // Accelerometers = (0.00019789082)^2 =0.0000000391607766
     
     var_ori_rp_ = this->get_parameter("variance_orientation_rp").as_double();
     var_ori_y_ = this->get_parameter("variance_orientation_y").as_double();
@@ -2250,8 +2245,8 @@ imu0:
   
   
   #Test
-  accelerometer_noise_density: 0.01373676763
-  accelerometer_random_walk: 0.0005624771742904598
+  accelerometer_noise_density: 0.01373676763 #0.01373676763
+  accelerometer_random_walk: 0.0005624771742904598 #0.0005624771742904598
   gyroscope_noise_density: 0.00097604109
   gyroscope_random_walk: 1.4185449668488343e-05
   
@@ -2363,8 +2358,8 @@ integration: "rk4" # discrete, rk4, analytical (if rk4 or analytical used then a
 use_stereo: true # if we have more than 1 camera, if we should try to track stereo constraints between pairs
 max_cameras: 2 # how many cameras we have 1 = mono, 2 = stereo, >2 = binocular (all mono tracking)
 
-calib_cam_extrinsics: true # if the transform between camera and IMU should be optimized R_ItoC, p_CinI
-calib_cam_intrinsics: true # if camera intrinsics should be optimized (focal, center, distortion)
+calib_cam_extrinsics: false #true # if the transform between camera and IMU should be optimized R_ItoC, p_CinI
+calib_cam_intrinsics: false #true # if camera intrinsics should be optimized (focal, center, distortion)
 calib_cam_timeoffset: true # if timeoffset between camera and IMU should be optimized
 calib_imu_intrinsics: false         # if imu intrinsics should be calibrated (rotation and skew-scale matrix)
 calib_imu_g_sensitivity: true # if gyroscope gravity sensitivity (Tg) should be calibrated
@@ -2628,7 +2623,7 @@ ukf_filter_node:
         # required. Data is specified at the level of pose and twist variables, rather than for each variable in isolation.
         # For messages that have both pose and twist data, the parameter specifies to which part of the message we are applying
         # the thresholds.
-        odom0_pose_rejection_threshold: 3.0
+        odom0_pose_rejection_threshold: 10.0
         odom0_twist_rejection_threshold: 3.0
         
 
@@ -2945,7 +2940,7 @@ ekf_filter_node:
         # required. Data is specified at the level of pose and twist variables, rather than for each variable in isolation.
         # For messages that have both pose and twist data, the parameter specifies to which part of the message we are applying
         # the thresholds.
-        odom0_pose_rejection_threshold: 3.0
+        odom0_pose_rejection_threshold: 1.0
         odom0_twist_rejection_threshold: 3.0
 
         
@@ -3040,9 +3035,9 @@ ekf_filter_node:
           0.0,    0.0,    0.04,   0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,
           0.0,    0.0,    0.0,    0.03,   0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,
           0.0,    0.0,    0.0,    0.0,    0.03,   0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,
-          0.0,    0.0,    0.0,    0.0,    0.0,    0.06,   0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,
-          0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.39,   0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,
-          0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.39,   0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,
+          0.0,    0.0,    0.0,    0.0,    0.0,    0.39,   0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,
+          0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.39,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,
+          0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.6,   0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,
           0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.05,   0.0,    0.0,    0.0,    0.0,    0.0,    0.0,
           0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.01,   0.0,    0.0,    0.0,    0.0,    0.0,
           0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.01,   0.0,    0.0,    0.0,    0.0,

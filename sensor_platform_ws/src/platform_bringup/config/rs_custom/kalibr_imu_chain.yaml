@@ -17,8 +17,8 @@ imu0:
   
   
   #Test
-  accelerometer_noise_density: 0.01373676763
-  accelerometer_random_walk: 0.0005624771742904598
+  accelerometer_noise_density: 0.01373676763 #0.01373676763
+  accelerometer_random_walk: 0.0005624771742904598 #0.0005624771742904598
   gyroscope_noise_density: 0.00097604109
   gyroscope_random_walk: 1.4185449668488343e-05
   
