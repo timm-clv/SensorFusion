@@ -19,4 +19,4 @@ Welcome to the repository for my sophomore-year internship project at CRTA Zagre
 * **`tf_tree.pdf`**: Diagram of the system’s transformation tree (TF Tree).
 * **`.gitignore`**: Configuration of exclusion rules for Git.
 
-For more information on the project’s implementation, see the report [here].(report/Visual Inertial Data Collection Platform and Sensor Fusion Benchmarking.pdf)
+For more information on the project’s implementation, see the report [here](report/Visual Inertial Data Collection Platform and Sensor Fusion Benchmarking.pdf) .
