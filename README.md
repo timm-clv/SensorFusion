@@ -6,6 +6,9 @@ Welcome to the repository for my sophomore-year internship project at CRTA Zagre
 <video src="https://raw.githubusercontent.com/timm-clv/SensorFusion/main/image-video/testspot_LNSA4cPV.mp4" controls width="100%"></video>
 
 
+https://github.com/timm-clv/SensorFusion/raw/main/image-video/testspot_LNSA4cPV.mp4
+
+
 ## 📁 Project Architecture
 
 * **`CAD Model/`**: 3D CAD models of the various platform structures.
