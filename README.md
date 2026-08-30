@@ -3,7 +3,7 @@
 Welcome to the repository for my sophomore-year internship project at CRTA Zagreb.
 
 <p align="center">
-  <img src="/image-video/testspot_LNSA4cPV.mp4" alt="Embedded platform on Spot" width="600">
+  <video src="/image-video/testspot_LNSA4cPV.mp4" controls width="100%"></video>
 </p>
 
 
@@ -19,4 +19,4 @@ Welcome to the repository for my sophomore-year internship project at CRTA Zagre
 * **`tf_tree.pdf`**: Diagram of the system’s transformation tree (TF Tree).
 * **`.gitignore`**: Configuration of exclusion rules for Git.
 
-For more information on the project’s implementation, see the report [here](report/Visual Inertial Data Collection Platform and Sensor Fusion Benchmarking.pdf) .
+For more information on the project’s implementation, see the report [here](report/Visual%20Inertial%20Data%20Collection%20Platform%20and%20Sensor%20Fusion%20Benchmarking.pdf).
