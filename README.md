@@ -2,9 +2,8 @@
 
 Welcome to the repository for my sophomore-year internship project at CRTA Zagreb.
 
-<p align="center">
-  <video src="/image-video/testspot_LNSA4cPV.mp4" controls width="100%"></video>
-</p>
+<video src="/image-video/testspot_LNSA4cPV.mp4" controls width="100%"></video>
+
 
 
 ## 📁 Project Architecture
