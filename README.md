@@ -3,9 +3,7 @@
 Welcome to the repository for my sophomore-year internship project at CRTA Zagreb.
 
 
-
-https://github.com/user-attachments/assets/8d197b3d-deb8-4221-8510-8f74620f8335
-
+https://github.com/user-attachments/assets/9cd43fec-cac7-4066-9908-24317d077c77
 
 
 
