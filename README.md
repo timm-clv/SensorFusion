@@ -2,13 +2,13 @@
 
 Welcome to the repository for my sophomore-year internship project at CRTA Zagreb.
 
-<video src="/image-video/testspot_LNSA4cPV.mp4" controls width="100%"></video>
+<video src="image-video/testspot_LNSA4cPV.mp4" controls width="100%"></video>
 
 
 
 ## 📁 Project Architecture
 
-* **`CAD Model/`**: 3D CAD models of the embedded platform’s structure.
+* **`CAD Model/`**: 3D CAD models of the various platform structures.
 * **`sensor_platform_ws/`**: Main workspace (ROS2) containing packages and source code.
 * **`calibration/`**: Configuration files and sensor calibration parameters.
 * **`analysis/`**: Rosbags and scripts related to result analysis.
