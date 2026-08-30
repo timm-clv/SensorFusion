@@ -3,7 +3,7 @@
 Welcome to the repository for my sophomore-year internship project at CRTA Zagreb.
 
 <video src="image-video/testspot_LNSA4cPV.mp4" controls width="100%"></video>
-<video src="https://raw.githubusercontent.com/timm-clv/SensorFusion/tree/main/image-video/testspot_LNSA4cPV.mp4" controls width="100%"></video>
+<video src="https://raw.githubusercontent.com/timm-clv/SensorFusion/main/image-video/testspot_LNSA4cPV.mp4" controls width="100%"></video>
 
 
 ## 📁 Project Architecture
